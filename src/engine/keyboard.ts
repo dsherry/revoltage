@@ -10,6 +10,8 @@ export function handleKey(e: KeyboardEvent, engine: Engine): void {
   else if (k === 'b' || k === 'B') engine.toggleBlackout();
   else if (k === 'P' && e.shiftKey) engine.togglePanic();
   else if (k === 'o' || k === 'O') void engine.output.open();
+  else if (k === ' ') engine.clock.togglePlay();
+  else if (k === 't' || k === 'T') engine.clock.tap();
   else return;
   e.preventDefault();
 }

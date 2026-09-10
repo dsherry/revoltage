@@ -1,6 +1,7 @@
 <script lang="ts">
   import { engine } from '../engine/engine';
   import { view } from './view.svelte';
+  import BeatLight from './BeatLight.svelte';
 
   const scales = [1, 0.75, 0.5];
 </script>
@@ -12,6 +13,19 @@
       {view.starting ? 'Starting…' : 'Start'}
     </button>
   {/if}
+  <span class="clock">
+    <BeatLight />
+    <input type="number" min="30" max="300" step="0.1" value={view.clock.bpm.toFixed(1)} disabled={view.clock.source === 'midi'}
+      onchange={(e) => engine.clock.setBpm(Number(e.currentTarget.value))} title="BPM" />
+    <button disabled={view.clock.source === 'midi'} onclick={() => engine.clock.tap()}>Tap <kbd>T</kbd></button>
+    <button disabled={view.clock.source === 'midi'} onclick={() => engine.clock.togglePlay()}>
+      {view.clock.playing ? 'Stop' : 'Play'} <kbd>Space</kbd>
+    </button>
+    <select value={view.clock.source} onchange={(e) => engine.clock.setSource(e.currentTarget.value as 'internal' | 'midi')}>
+      <option value="internal">Internal clock</option>
+      <option value="midi">Follow MIDI clock</option>
+    </select>
+  </span>
   <button onclick={() => engine.output.open()}>{view.outputOpen ? 'Focus output' : 'Open output'} <kbd>O</kbd></button>
   <button disabled={!view.outputOpen} onclick={() => engine.output.requestFullscreen()}>Fullscreen</button>
   <button class:on={view.blackout} onclick={() => engine.toggleBlackout()}>Blackout <kbd>B</kbd></button>
@@ -36,5 +50,7 @@
   .start { background: #1f6f3f; border-color: #2e9a5a; color: #fff; font-weight: 600; }
   .on { background: #555; color: #fff; }
   .danger { background: #8b1d1d; border-color: #c33; color: #fff; }
+  .clock { display: flex; align-items: center; gap: 4px; padding: 0 8px; border-left: 1px solid #333; border-right: 1px solid #333; }
+  .clock input { width: 64px; }
   .stats { margin-left: auto; color: #8a8; font: 12px ui-monospace, monospace; }
 </style>

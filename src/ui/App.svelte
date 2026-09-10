@@ -4,6 +4,12 @@
   import Stage from './Stage.svelte';
   import Settings from './Settings.svelte';
   import LogPanel from './LogPanel.svelte';
+  import Mixer from './Mixer.svelte';
+  import { view } from './view.svelte';
+
+  const tabs = ['mixer', 'log'] as const;
+  let tab = $state<(typeof tabs)[number]>('mixer');
+  const errors = $derived(view.logs.filter((e) => e.level === 'error').length);
 </script>
 
 <div class="layout">
@@ -13,7 +19,16 @@
     <Stage />
     <Settings />
   </main>
-  <aside class="right"><LogPanel /></aside>
+  <aside class="right">
+    <nav class="tabs">
+      {#each tabs as t (t)}
+        <button class:sel={tab === t} onclick={() => (tab = t)}>
+          {t}{#if t === 'log' && errors}<span class="badge">{errors}</span>{/if}
+        </button>
+      {/each}
+    </nav>
+    {#if tab === 'mixer'}<Mixer />{:else}<LogPanel />{/if}
+  </aside>
 </div>
 
 <style>
@@ -65,4 +80,8 @@
     min-width: 0;
   }
   .right { grid-area: right; border-left: 1px solid #333; overflow: hidden; display: flex; flex-direction: column; }
+  .tabs { display: flex; gap: 4px; padding: 6px 8px; border-bottom: 1px solid #2a2a2a; }
+  .tabs button { text-transform: capitalize; }
+  .tabs .sel { background: #333; color: #fff; }
+  .badge { background: #b33; color: #fff; border-radius: 8px; padding: 0 5px; margin-left: 4px; font-size: 11px; }
 </style>

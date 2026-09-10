@@ -9,6 +9,8 @@ import { load, save } from './persist';
 import { log } from './log';
 import { handleKey } from './keyboard';
 import { createStubServices } from './stubs';
+import { AudioEngine } from './audio/audio';
+import { ClockEngine } from './clock/clock';
 import type { Services } from './services';
 
 const DEFAULT_OUTPUT = { w: 1920, h: 1080 };
@@ -23,7 +25,9 @@ export class Engine {
   readonly host: AppHost;
   readonly loop: Loop;
   readonly stats = new Stats();
-  readonly services: Services = createStubServices();
+  readonly audio = new AudioEngine();
+  readonly clock = new ClockEngine();
+  readonly services: Services = { ...createStubServices(), audio: this.audio, clock: this.clock };
   readonly keyboard = { handle: (e: KeyboardEvent) => handleKey(e, this) };
 
   started = false;
@@ -39,6 +43,8 @@ export class Engine {
     this.stageEl.style.cssText = 'position:relative;width:100%;height:50vh;background:#000;';
     this.output = new OutputWindow(() => this.onOutputChanged());
     this.host = new AppHost(this);
+    this.audio.onChange = () => this.emit();
+    this.clock.onChange = () => this.emit();
     this.loop = new Loop({
       frame: (now, dt) => this.frame(now, dt),
       driver: () => (this.output.visible ? this.output.win! : window),

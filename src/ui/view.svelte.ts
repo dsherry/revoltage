@@ -20,6 +20,7 @@ export const view = $state({
   renderScale: 1,
   size: { w: 0, h: 0 },
   stats: { fps: 0, frameP95: 0, appP95: 0, mirrorP95: 0 },
+  clock: { bpm: 120, playing: false, source: 'internal' as 'internal' | 'midi' },
   logs: [...recentLogs()] as LogEntry[],
 });
 
@@ -41,12 +42,19 @@ function sync(): void {
   view.renderScale = engine.renderScale;
   const s = engine.surfaceSize();
   view.size = { w: s.w, h: s.h };
+  syncClock();
+}
+
+function syncClock(): void {
+  const c = engine.clock.snapshot();
+  view.clock = { bpm: c.bpm, playing: c.playing, source: engine.clock.source };
 }
 
 engine.events.on(sync);
 setInterval(() => {
   view.stats = engine.stats.summary();
   view.outputOpen = engine.output.isOpen;
+  syncClock();
 }, 250);
 onLog((e) => {
   view.logs.push(e);
