@@ -30,9 +30,7 @@ export function buildPane(
       b.on('click', () => store.fire(key));
       element = b.element;
     } else if (def.type === 'zones') {
-      // The zone editor (drawn on a camera preview) arrives with vision (M8).
-      const b = parent.addButton({ title: `${label}: edit on camera (coming with vision)`, disabled: true });
-      element = b.element;
+      continue; // edited in the ZoneEditor below the pane (Settings.svelte)
     } else {
       let opts: Record<string, unknown> = { label };
       switch (def.type) {

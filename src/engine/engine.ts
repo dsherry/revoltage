@@ -12,6 +12,7 @@ import { createStubServices } from './stubs';
 import { AudioEngine } from './audio/audio';
 import { ClockEngine } from './clock/clock';
 import { MidiEngine } from './midi/midi';
+import { VisionEngine } from './vision/vision';
 import { Scope } from './scope';
 import type { Services } from './services';
 
@@ -37,7 +38,10 @@ export class Engine {
     getMasterVolume: () => this.audio.masterVolume,
     setlistState: () => ({ filled: this.setlist.map(Boolean), active: this.activeSlot }),
   });
-  readonly services: Services = { ...createStubServices(), audio: this.audio, midi: this.midi, clock: this.clock };
+  readonly vision = new VisionEngine();
+  readonly services: Services = {
+    ...createStubServices(), audio: this.audio, midi: this.midi, vision: this.vision, clock: this.clock,
+  };
   readonly keyboard = { handle: (e: KeyboardEvent) => handleKey(e, this) };
 
   started = false;
@@ -56,6 +60,7 @@ export class Engine {
     this.audio.onChange = () => this.emit();
     this.clock.onChange = () => this.emit();
     this.midi.onChange = () => this.emit();
+    this.vision.onChange = () => this.emit();
     // The clock sends through a permanent (never-unmounted) MIDI scope.
     let clockOut: ReturnType<MidiEngine['scoped']> | null = null;
     this.clock.attachMidi({

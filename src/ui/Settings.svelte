@@ -4,11 +4,14 @@
   import { view } from './view.svelte';
   import { buildPane } from '../engine/params/pane';
   import { exportAll, importAll } from '../engine/persist';
+  import ZoneEditor from './ZoneEditor.svelte';
+  import type { Zone } from '@sdk';
 
   let paneEl: HTMLDivElement | undefined = $state();
   let presets = $state<string[]>([]);
   let chosen = $state('');
   let newName = $state('');
+  let zoneParams = $state<{ key: string; label: string; camera: string; zones: Zone[] }[]>([]);
 
   // Rebuild the settings page on every mount (including hot reloads of the same app).
   // Only mountCount and the container are dependencies; the rest is untracked so
@@ -17,13 +20,28 @@
     void view.mountCount;
     const el = paneEl;
     return untrack(() => {
+      zoneParams = [];
       const m = engine.host.current;
       if (!m || !el) return;
       const pane = buildPane(el, m.def.params, m.store, (k) => engine.deviceNames(k));
       const list = m.store.presets.list();
       presets = list;
       chosen = list[0] ?? '';
-      return () => pane.dispose();
+      // Zones params get a camera zone editor; its camera may come from an `input` param.
+      const params = m.def.params;
+      const refreshZones = () => untrack(() => {
+        zoneParams = Object.entries(params).flatMap(([key, d]) => {
+          if (d.type !== 'zones') return [];
+          const camera = params[d.camera]?.type === 'input' ? String(m.store.get(d.camera) ?? '') : d.camera;
+          return [{ key, label: d.label ?? key, camera, zones: m.store.get(key) as Zone[] }];
+        });
+      });
+      refreshZones();
+      const off = m.store.onAny((k) => {
+        const t = params[k]?.type;
+        if (t === 'zones' || t === 'input') refreshZones();
+      });
+      return () => { off(); pane.dispose(); };
     });
   });
 
@@ -80,6 +98,12 @@
     <div class="title muted">No app loaded</div>
   {/if}
   <div class="pane" bind:this={paneEl}></div>
+  {#each zoneParams as z (z.key)}
+    <div class="zones">
+      <h3>{z.label} · camera {z.camera || 'default'}</h3>
+      <ZoneEditor camera={z.camera} zones={z.zones} onchange={(zs) => store()?.set(z.key, zs)} />
+    </div>
+  {/each}
   <div class="io">
     <button onclick={doExport}>Export all settings</button>
     <label class="import">Import… <input type="file" accept="application/json" onchange={doImport} /></label>
@@ -92,6 +116,7 @@
   .presets { display: flex; gap: 4px; margin: 6px 0; flex-wrap: wrap; }
   .presets input { width: 140px; }
   .pane { max-width: 420px; }
+  .zones { max-width: 640px; margin-top: 8px; }
   .io { margin-top: 10px; display: flex; gap: 8px; align-items: center; }
   .import { border: 1px solid #444; border-radius: 4px; padding: 3px 8px; cursor: pointer; }
   .import input { display: none; }

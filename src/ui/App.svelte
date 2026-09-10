@@ -6,10 +6,11 @@
   import LogPanel from './LogPanel.svelte';
   import Mixer from './Mixer.svelte';
   import MidiPanel from './MidiPanel.svelte';
+  import Cameras from './Cameras.svelte';
   import { view } from './view.svelte';
   import { log } from '../engine/log';
 
-  const tabs = ['mixer', 'midi', 'log'] as const;
+  const tabs = ['mixer', 'midi', 'cameras', 'log'] as const;
   let tab = $state<(typeof tabs)[number]>('mixer');
   const errors = $derived(view.logs.filter((e) => e.level === 'error').length);
 </script>
@@ -39,7 +40,7 @@
       {/each}
     </nav>
     <svelte:boundary onerror={(e) => log('error', 'ui', e)} failed={crashed}>
-      {#if tab === 'mixer'}<Mixer />{:else if tab === 'midi'}<MidiPanel />{:else}<LogPanel />{/if}
+      {#if tab === 'mixer'}<Mixer />{:else if tab === 'midi'}<MidiPanel />{:else if tab === 'cameras'}<Cameras />{:else}<LogPanel />{/if}
     </svelte:boundary>
   </aside>
 </div>
