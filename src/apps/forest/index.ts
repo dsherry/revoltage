@@ -37,7 +37,7 @@ const params = defineParams({
   colorC: { type: 'color', default: '#7fd4ff', description: 'Electric: pulses, electron sparks, lightning (APC pad rows 7–8)' },
   strike: { type: 'trigger', description: 'Force an electrical strike (APC track button 1)' },
   sensitivity: { type: 'slider', min: 0, max: 1, default: 0.8, description: 'Input sensitivity: 0 = only very loud sound gets through, 1 = everything, even quiet sounds' },
-  churn: { type: 'slider', min: 0, max: 1, default: 0.4, description: 'Shiny Cell: how often cells are born and die (hits can spawn cells too)' },
+  churn: { type: 'slider', min: 0, max: 1, default: 0.4, description: 'Shiny Cell: how often cells divide and die; sustained sound grows the colony and speeds this up (hits can trigger it too)' },
   parade: { type: 'toggle', default: false, description: 'Lightning Chase: each chase is followed by a turtle and a sloth parading with colorful flags' },
   useCamera: {
     type: 'select', options: ['off', 'hand', 'body'], default: 'off',

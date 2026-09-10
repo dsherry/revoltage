@@ -72,6 +72,8 @@ export function buildChloroplast(ctx: SceneContext, opts: ChloroplastOptions = {
   const weight = new Float64Array(MAX_CELLS);
   const exc = new Float64Array(MAX_CELLS);
   const alive = new Uint8Array(MAX_CELLS); // Shiny Cell: which cells are currently alive
+  const vx = new Float64Array(MAX_CELLS), vy = new Float64Array(MAX_CELLS); // Shiny Cell: division push
+  const bornAt = new Float64Array(MAX_CELLS).fill(-10);
   const seedU = new Float32Array(MAX_CELLS * 4);
   const cellU = new Float32Array(MAX_CELLS * 4);
 
@@ -202,7 +204,7 @@ export function buildChloroplast(ctx: SceneContext, opts: ChloroplastOptions = {
   const chain = new Int32Array(16);
 
   // --- State.
-  let flow = 0, fill = 0, clock = 0, hit = 0;
+  let flow = 0, fill = 0, clock = 0, hit = 0, act = 0, divTimer = 0;
   let handAmt = 0, hx = 0, hy = 0, maskOn = 0;
   let first = true;
 
@@ -278,12 +280,15 @@ export function buildChloroplast(ctx: SceneContext, opts: ChloroplastOptions = {
 
   // --- Shiny Cell turnover: cells die away and new ones grow into the biggest gap.
   const isFree = (c: number) => !alive[c] && weight[c] < 0.02;
+  // A random living cell dies, sparing ones born in the last 1.5 s when possible.
   const kill = () => {
-    let n = 0;
-    for (let c = 0; c < MAX_CELLS; c++) n += alive[c];
-    let pick = Math.floor(Math.random() * n);
+    let n = 0, old = 0;
+    for (let c = 0; c < MAX_CELLS; c++) if (alive[c]) { n++; if (clock - bornAt[c] > 1.5) old++; }
+    if (!n) return;
+    const onlyOld = old > 0;
+    let pick = Math.floor(Math.random() * (onlyOld ? old : n));
     for (let c = 0; c < MAX_CELLS; c++) {
-      if (!alive[c] || pick-- > 0) continue;
+      if (!alive[c] || (onlyOld && clock - bornAt[c] <= 1.5) || pick-- > 0) continue;
       alive[c] = 0;
       exc[c] = Math.max(exc[c], 0.35);
       return;
@@ -307,8 +312,41 @@ export function buildChloroplast(ctx: SceneContext, opts: ChloroplastOptions = {
     }
     baseX[c] = bx;
     baseY[c] = by;
+    vx[c] = vy[c] = 0;
     alive[c] = 1;
+    bornAt[c] = clock;
     exc[c] = BIRTH_FLASH;
+    return true;
+  };
+  // Division: a living cell buds a daughter that pushes away from it while growing in.
+  const divide = (t: number): boolean => {
+    let c = -1;
+    const start = Math.floor(Math.random() * MAX_CELLS);
+    for (let j = 0; j < MAX_CELLS; j++) {
+      const k = (start + j) % MAX_CELLS;
+      if (isFree(k)) { c = k; break; }
+    }
+    if (c < 0) return false;
+    // Parent: the biggest of a few random fully grown cells.
+    let parent = -1;
+    for (let tries = 0; tries < 8; tries++) {
+      const j = Math.floor(Math.random() * MAX_CELLS);
+      if (alive[j] && cw[j] > 0.9 && (parent < 0 || cr[j] > cr[parent])) parent = j;
+    }
+    if (parent < 0) return birth();
+    const ang = Math.random() * Math.PI * 2, dx = Math.cos(ang), dy = Math.sin(ang);
+    // Start just beside the parent (compensating for the daughter's own wander), then push apart.
+    baseX[c] = cx[parent] + dx * 0.02 - 0.07 * Math.sin(t * wanF[c * 4] + wanF[c * 4 + 2]);
+    baseY[c] = cy[parent] + dy * 0.02 - 0.07 * Math.sin(t * wanF[c * 4 + 1] + wanF[c * 4 + 3]);
+    const push = 0.3 + 0.8 * cr[parent];
+    vx[c] = dx * push;
+    vy[c] = dy * push;
+    vx[parent] -= dx * push * 0.6;
+    vy[parent] -= dy * push * 0.6;
+    alive[c] = 1;
+    bornAt[c] = clock;
+    exc[c] = BIRTH_FLASH;
+    exc[parent] = Math.max(exc[parent], BIRTH_FLASH);
     return true;
   };
   const hasFree = () => {
@@ -342,19 +380,43 @@ export function buildChloroplast(ctx: SceneContext, opts: ChloroplastOptions = {
       // cells that keeps turning over (churn); hits can trigger a turnover too.
       let target = Math.round(8 + 16 * i.density);
       if (shiny) {
-        target = Math.min(target, MAX_CELLS - 4); // keep free cells for births
+        // Sustained sound (the level smoothed over ~0.6 s) grows the colony by division; silence lets it die back.
+        act += (Math.min(level, 1.2) - act) * (1 - Math.exp(-rdt / 0.6));
+        target = Math.min(MAX_CELLS - 3, Math.round(6 + 12 * i.density + act * (3 + 9 * i.churn)));
         if (first) for (let c = 0; c < MAX_CELLS; c++) alive[c] = c < target ? 1 : 0;
         let count = 0;
         for (let c = 0; c < MAX_CELLS; c++) count += alive[c];
-        while (count > target) { kill(); count--; }
-        while (count < target && birth()) count++;
-        const turnover = Math.random() < i.churn * i.churn * 3 * rdt || (i.onset && Math.random() < i.churn);
-        if (turnover && count > 2 && hasFree()) { kill(); birth(); }
+        // One division or death at a time, so growth cascades instead of popping.
+        divTimer -= rdt;
+        if (divTimer <= 0 && count !== target) {
+          if (count < target) {
+            if (divide(i.t)) {
+              count++;
+              divTimer = 0.18 - 0.12 * Math.min(act, 1);
+              spawnChain(3 + Math.round(3 * i.charge), 0.5);
+            }
+          } else {
+            kill();
+            count--;
+            divTimer = 0.4;
+          }
+        }
+        // Turnover (a division plus a death) runs faster with sustained sound; hits can trigger it too.
+        const rate = i.churn * i.churn * 3 * (0.3 + 2.5 * act);
+        const turnover = Math.random() < rate * rdt || (i.onset && Math.random() < Math.min(1, i.churn + 0.5 * act));
+        if (turnover && count > 2 && hasFree() && divide(i.t)) kill();
       }
       const ease = first ? 1 : 1 - Math.exp(-rdt * (shiny ? 2.2 : 0.8));
       const breathe = shiny ? 1 + 0.05 * i.bass : 1;
       for (let c = 0; c < MAX_CELLS; c++) {
         const on = shiny ? alive[c] === 1 : c < target;
+        if (shiny) {
+          baseX[c] = Math.max(-aspect * 1.05, Math.min(aspect * 1.05, baseX[c] + vx[c] * rdt));
+          baseY[c] = Math.max(-1.05, Math.min(1.05, baseY[c] + vy[c] * rdt));
+          const damp = Math.exp(-rdt * 2.5);
+          vx[c] *= damp;
+          vy[c] *= damp;
+        }
         weight[c] += ((on ? 1 : 0) - weight[c]) * ease;
         cw[c] = smooth01(clamp01(weight[c]));
         coff[c] = (1 - cw[c]) * GONE;
@@ -382,12 +444,14 @@ export function buildChloroplast(ctx: SceneContext, opts: ChloroplastOptions = {
 
       // Sparks first so their cell excitation lands in this frame's uniforms.
       if (i.onset) {
-        const chains = shiny ? 1 + Math.floor(i.charge * 2.5 * i.onsetStrength + 0.5) : 1;
+        const chains = shiny ? 1 + Math.floor(i.charge * 2.5 * i.onsetStrength + 0.5 + 1.5 * act) : 1;
         const hops = shiny ? Math.round(3 + i.charge * 12 * i.onsetStrength) : Math.round(2 + i.charge * 8 * i.onsetStrength);
         for (let n = 0; n < chains; n++) spawnChain(hops, 0.4 + 0.6 * i.onsetStrength);
       }
-      // Shiny Cell also throws off stray sparks while the music is loud.
-      if (shiny && Math.random() < rdt * i.charge * (0.5 + 3 * level)) spawnChain(Math.round(2 + 4 * i.charge), 0.3 + 0.4 * Math.min(level, 1));
+      // Shiny Cell also throws off stray sparks, much more often (and longer) during sustained sound.
+      if (shiny && Math.random() < rdt * i.charge * (1 + 8 * act)) {
+        spawnChain(Math.round(2 + 4 * i.charge + 6 * act), 0.3 + 0.5 * Math.min(act, 1));
+      }
       hit = Math.max(hit * Math.exp(-rdt * 6), i.onset ? i.onsetStrength : 0);
 
       const cC = i.colorC;
@@ -487,7 +551,7 @@ export function buildChloroplast(ctx: SceneContext, opts: ChloroplastOptions = {
         ? 0.8 + 1.1 * i.bass + 0.3 * i.beat + 0.1 * Math.sin(clock * 0.9)
         : 0.8 + 0.5 * i.bass + 0.15 * i.beat + 0.07 * Math.sin(clock * 0.5);
       bu.uCharge.value = i.charge;
-      bu.uHit.value = hit;
+      bu.uHit.value = shiny ? Math.max(hit, 0.3 * act) : hit; // sustained sound keeps the walls crackling
       bu.uLvl.value = level;
       bu.uTreb.value = i.treble;
       const pu = pMat.uniforms;
