@@ -768,7 +768,7 @@ These always work, whatever app is loaded.
 
 | Input | Action |
 |---|---|
-| APC **master fader** (CC 56) | Master volume, with **pickup**: the fader must cross the current value before it takes control, so a stray fader position can't cause a jump |
+| APC **master fader** (CC 56) | Master volume, with **pickup**: the fader must cross the current value before it takes control, so a stray fader position can't cause a jump. Master volume starts at 100% each session and isn't saved. |
 | APC **Shift + Scene 1–8** | Load setlist slot 1–8 (hard cut) |
 | APC **Shift + Track 1** | Blackout on/off |
 | APC **Shift + Track 8** | **Panic:** fade the app audio bus to 0 and send all-notes-off to every MIDI output. Press again to restore the audio. |
@@ -922,6 +922,18 @@ Once M1 fixes the SDK contracts, M3, M4, M7 and M8 are independent behind their 
 | M9 | `three` and `p5` adapters with example apps; recorder (record/loop); Tone.js sequencing helper | Example apps for each surface |
 | M10 | Show hardening: `npm run show`, run the checklist, 30-minute soak test | Checklist passes |
 
+### Status (2026-09-10, afternoon)
+
+| Milestone | Status |
+|---|---|
+| M0–M5 | Done. Pulse runs with the OP-1. |
+| M6 clock | Done (internal clock, tap, MIDI clock send and follow); not yet tried with the OP-1 syncing. |
+| M7 sensors | Waiting: the Arduino code gets its own session. Wiring guide is in [ARDUINO.md](ARDUINO.md). |
+| M8 vision | Done; Vision Check app added for testing. Not yet tried with a real camera. |
+| M9 | The `three` surface works; the `p5` surface and the audio recorder are not built yet. |
+| M10 | Not started. |
+| Tests | Vitest is not installed: npm 11.4.2 crashes resolving its peer dependencies. |
+
 ### Hardware checks
 
 These were planned as separate test pages in the first hour. Instead, each one is measured in the real code as its milestone lands: S1 in M1 (the top bar shows mirror time), S3 in M3, S4 in M4 and S2 in M8.
@@ -935,14 +947,12 @@ These were planned as separate test pages in the first hour. Instead, each one i
 
 ## 15. Hardware check results
 
-*(filled in as each milestone lands)*
-
-| Spike | Result | Decision |
+| Check | Result | Decision |
 |---|---|---|
-| S1 | | |
-| S2 | | |
-| S3 | | |
-| S4 | | |
+| S1 mirroring | Not measured yet. The top bar shows mirror time (p95) while the output window is open. | Read it with the projector connected. |
+| S2 vision | Measured by the vision agent in headless Chrome on this MacBook's GPU, with fake cameras: pose-lite 35–40 ms per frame, hands about 16 ms, mask about 22 ms, zones about 4 ms. With everything on, auto-degrade brought CV down to about 12 fps. | Apps enable only the tasks they use, with `maxPeople` 1–2. Plan on full CV for one camera, not two. |
+| S3 OP-1 audio | The OP-1 opens at 44.1 kHz, 2 channels, in a 48 kHz context. Base latency 5.3 ms, output latency 14–28 ms. No artifacts reported so far. | Keep the context at the output device's rate. |
+| S4 APC mini mk1 | Waiting for readings from the MIDI monitor. | — |
 
 ---
 
