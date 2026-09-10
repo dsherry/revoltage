@@ -60,16 +60,10 @@ uniform float uTreble;
 uniform float uLevel;
 uniform float uOnset;
 uniform float uBeat;
-uniform float uDrift; // cumulative drift (velocityDrift); 0 leaves the pattern as-is
 ${NOISE}
 
 void main() {
   vec2 p = (vUv - uCenter) * vec2(uRes.x / uRes.y, 1.0);
-  // Drift rotates the pattern, moves it through the noise and shifts where A vs B falls.
-  float dc = cos(uDrift * 0.5), ds = sin(uDrift * 0.5);
-  p = mat2(dc, -ds, ds, dc) * p;
-  vec2 travel = uDrift * vec2(0.6, 0.35);
-  float shift = 0.25 * sin(uDrift * 1.1);
   float r = length(p);
   float a = atan(p.y, p.x);
   float zoom = uZoom * (1.0 + 0.12 * uBass);
@@ -78,11 +72,10 @@ void main() {
 
   if (uMode == 3) {
     // Cells: drifting Voronoi cells, each a mix of A and B; edges glow in C.
-    vec2 q = p * zoom * 3.0 + travel;
+    vec2 q = p * zoom * 3.0;
     q += uWarp * 0.3 * vec2(fbm(q * 0.5 + uTime * 0.1), fbm(q * 0.5 - uTime * 0.1 + 3.1));
-    vec3 v = voronoi(q, uTime * (0.6 + uMid) + uDrift);
-    // Triangle wave of the cell id (equal to v.z at zero drift), so drift cycles each cell's A/B mix without jumps.
-    col = mix(uColA, uColB, abs(fract(v.z * 0.5 + 0.5 + uDrift * 0.1) * 2.0 - 1.0)) * (1.1 - v.x);
+    vec3 v = voronoi(q, uTime * (0.6 + uMid));
+    col = mix(uColA, uColB, v.z) * (1.1 - v.x);
     hl = (1.0 - smoothstep(0.0, 0.06 + 0.12 * uTreble, v.y - v.x)) * (0.5 + uTreble);
   } else if (uMode == 4) {
     // Ripple: interference of three wandering wave sources.
@@ -90,11 +83,11 @@ void main() {
     float s = 0.0;
     for (int k = 0; k < 3; k++) {
       float fk = float(k);
-      vec2 src = 0.45 * vec2(cos(uTime * 0.23 + fk * 2.1 + uDrift * 0.7), sin(uTime * 0.31 + fk * 1.7 + uDrift * 0.7));
+      vec2 src = 0.45 * vec2(cos(uTime * 0.23 + fk * 2.1), sin(uTime * 0.31 + fk * 1.7));
       s += sin(length(q - src) * (14.0 + 10.0 * uMid) * (1.0 + uWarp * 0.3) - uTime * 3.0);
     }
     s /= 3.0;
-    col = mix(uColA, uColB, smoothstep(-0.6, 0.6, s + 1.6 * shift));
+    col = mix(uColA, uColB, smoothstep(-0.6, 0.6, s));
     hl = smoothstep(0.7, 1.0, abs(s)) * (0.4 + uTreble);
   } else {
     vec2 q = p;
@@ -107,11 +100,11 @@ void main() {
       float depth = 0.3 / max(r, 0.02) + uTime * 0.5;
       q = vec2(cos(a), sin(a)) * 1.2 + vec2(depth, depth * 0.6);
     }
-    q = q * zoom + travel;
+    q *= zoom;
     vec2 w = vec2(fbm(q * 1.5 + uTime * 0.15), fbm(q * 1.5 - uTime * 0.12 + 5.2));
     float n = fbm(q * 2.0 + uWarp * (w - 0.5) * (2.0 + 2.0 * uMid) + uTime * 0.05);
     float rings = sin(n * 12.0 + uTime * 2.0 - r * 4.0 * (1.0 + uTreble));
-    col = mix(uColA, uColB, smoothstep(0.2, 0.8, n + shift));
+    col = mix(uColA, uColB, smoothstep(0.2, 0.8, n));
     hl = smoothstep(0.6, 1.0, rings * 0.5 + 0.5) * (0.3 + uTreble);
   }
 

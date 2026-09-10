@@ -863,7 +863,7 @@ These always work, whatever app is loaded.
   | Audio feature | Visual effect |
   |---|---|
   | Level | Motion speed and brightness |
-  | Loudness over time | With `velocityDrift` > 0, raw loudness accumulates into a drift that moves, rotates and recolors the pattern. Nothing pulls the drift back, so the pattern stays where it lands (cumulative, vs the continuous reactions above). At 1, motion speed also follows raw loudness and freezes in silence. |
+  | Loudness over time | With `velocityDrift` > 0, raw loudness accumulates into a hue rotation. Nothing pulls it back, so the colors stay where they land (cumulative, vs the continuous reactions above). |
   | Bass | Zoom pulse and warp amount |
   | Mid | Rotation speed |
   | Treble | Grain and sparkle |

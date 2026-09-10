@@ -22,7 +22,7 @@ const params = defineParams({
   colorB: { type: 'color', default: '#05d9e8', description: 'Second color (APC pad rows 5–6)' },
   colorC: { type: 'color', default: '#d1f7ff', description: 'Highlight for rings, edges and onsets (APC pad rows 7–8)' },
   smoothing: { type: 'slider', min: 0, max: 1, default: 0.35, description: 'Smooths the response to audio: higher is calmer, lower is snappier' },
-  velocityDrift: { type: 'slider', min: 0, max: 1, default: 0, description: 'Continuous → cumulative. 0 = the visuals react to the sound and settle back when it stops. 1 = the sound also pushes the pattern along (travel, rotation, color layout), faster the louder it is, and it stays where it lands' },
+  velocityDrift: { type: 'slider', min: 0, max: 1, default: 0, description: 'Cumulative hue: sound turns the colors around the hue wheel, faster the louder it is, and they stay where they land when it stops. 0 = off' },
   beatSync: { type: 'toggle', default: false, description: 'Pulse with the clock beat (APC pad row 2, pad 8)' },
   center: { type: 'xy', default: { x: 0.5, y: 0.5 }, min: 0, max: 1, description: 'Center of the pattern and feedback zoom' },
   source: { type: 'input', kind: 'audioIn', default: 'op1', description: 'Audio input that drives the visuals' },
@@ -40,8 +40,8 @@ const colorPad = (x: number, y: number) => {
 
 const presetName = (x: number) => `pad ${x + 1}`;
 
-/** Drift units per second at full velocityDrift, speed 1 and full loudness. */
-const DRIFT_RATE = 1.2;
+/** Hue-wheel turns per second at full velocityDrift, speed 1 and full loudness. */
+const DRIFT_RATE = 0.25;
 
 export default defineApp({
   id: 'pulse',
@@ -124,13 +124,10 @@ export default defineApp({
         if (f.fired('flash')) flash = 1;
         flash *= Math.exp(-dt * 5);
 
-        // levelAuto reads ~1 for any steady sound, so motion tracks sound vs silence; the raw level
-        // (-60..0 dBFS → 0..1) tracks loudness. velocityDrift blends from the first to the second.
-        const presenceRate = 0.5 + level.value;
-        const loudnessRate = 2 * loudness.value;
-        phase += dt * p.speed * (presenceRate + (loudnessRate - presenceRate) * p.velocityDrift);
-        // Cumulative drift: loudness integrated over time. Nothing pulls it back, so the pattern stays where it lands.
-        drift += dt * p.speed * p.velocityDrift * DRIFT_RATE * loudness.value;
+        phase += dt * p.speed * (0.5 + level.value);
+        // Cumulative hue: raw loudness (-60..0 dBFS → 0..1, not auto-gained) integrated into hue-wheel turns.
+        // Nothing pulls it back, so the colors stay where they land.
+        drift = (drift + dt * p.speed * p.velocityDrift * DRIFT_RATE * loudness.value) % 1;
         // Bounded hue wander around the chosen colors (at most ~±0.4 of the wheel at full drift).
         hueT += dt;
         const hueOffset = p.hueDrift * (0.25 * Math.sin(hueT * 0.2) + 0.15 * mapRange(a.centroid, 500, 5000, 0, 1));
@@ -151,14 +148,13 @@ export default defineApp({
           uZoom: zoom,
           uWarp: warp,
           uFeedback: p.feedback,
-          uHue: hueOffset,
+          uHue: hueOffset + drift,
           uBass: bass.value,
           uMid: mid.value,
           uTreble: treble.value,
           uLevel: level.value,
           uOnset: onset.value * p.onsetSens,
           uBeat: beat,
-          uDrift: drift,
         }, fb.write);
         fb.swap();
         present.draw({ uTex: fb.readTexture, uFlash: flash });
