@@ -79,6 +79,9 @@ export default defineApp({
       return s;
     };
     ctx.own(() => { for (const s of scenes.values()) s.dispose(); });
+    // A scene that throws renders black (and logs every 2 s) instead of suspending the whole app.
+    const blank = { scene: new THREE.Scene(), camera: new THREE.Camera() };
+    const lastFailLog = new Map<SceneName, number>();
 
     let cv: VisionHandle | null = null;
     if (p.useCamera !== 'off') {
@@ -187,8 +190,17 @@ export default defineApp({
         inputs.light = p.light;
         inputs.life = p.life;
 
-        const scene = sceneFor(p.scene);
-        scene.update(inputs);
+        let scene: { scene: THREE.Scene; camera: THREE.Camera } = blank;
+        try {
+          const s = sceneFor(p.scene);
+          s.update(inputs);
+          scene = s;
+        } catch (e) {
+          if (f.now - (lastFailLog.get(p.scene) ?? -Infinity) > 2000) {
+            lastFailLog.set(p.scene, f.now);
+            ctx.log(`⚠ scene "${p.scene}" failed; showing black. Switch scenes with APC row 2.`, e);
+          }
+        }
 
         glowBoost = Math.max(glowBoost * Math.exp(-f.dt * 6), inputs.onset ? 0.5 * inputs.onsetStrength : 0);
         bloom.strength = p.glow * (1 + glowBoost);
