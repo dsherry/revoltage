@@ -862,7 +862,8 @@ These always work, whatever app is loaded.
 
   | Audio feature | Visual effect |
   |---|---|
-  | Level | Motion speed and brightness. `velocityDrift` blends motion speed from auto-gained level (sound vs silence) to raw loudness. |
+  | Level | Motion speed and brightness |
+  | Loudness over time | With `velocityDrift` > 0, raw loudness accumulates into a drift that moves, rotates and recolors the pattern. Nothing pulls the drift back, so the pattern stays where it lands (cumulative, vs the continuous reactions above). At 1, motion speed also follows raw loudness and freezes in silence. |
   | Bass | Zoom pulse and warp amount |
   | Mid | Rotation speed |
   | Treble | Grain and sparkle |
