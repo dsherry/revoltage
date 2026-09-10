@@ -632,7 +632,8 @@ interface VisionHandle {
 }
 interface Landmark { x: number; y: number; z: number; visibility?: number }   // normalized image coords (0..1)
 interface Person { id: number; landmarks: Landmark[] /* 33, MediaPipe order */; bbox: Rect; center: {x:number,y:number}; speed: number }
-interface Hand { handedness: 'Left' | 'Right'; landmarks: Landmark[] /* 21 */; speed: number;
+interface Hand { id: number /* stable while tracked */; seen: number /* performance.now() of its last result */;
+  handedness: 'Left' | 'Right'; landmarks: Landmark[] /* 21 */; speed: number;
   gesture: { name: 'None'|'Closed_Fist'|'Open_Palm'|'Pointing_Up'|'Thumb_Down'|'Thumb_Up'|'Victory'|'ILoveYou'; score: number } }
 interface Zone { name: string; points: [number, number][] }   // normalized; a rectangle is 4 points
 interface ZoneState { motion: number /* 0..1 */; active: boolean; since: number }

@@ -4,9 +4,10 @@ import { GestureTracker, MIN_SIZE, type HandState, type Swing } from './gestures
 import { makeNotes, NOTE_NAMES, noteName, randInt, SCALE_NAMES, SCALES } from './scales';
 
 const OUTPUTS = ['OP-1 (MIDI)', 'Browser synth'] as const;
+const TRACK_MODES = ['arms', 'hands'] as const;
 const KEY_STYLES = ['root', 'random', 'height'] as const;
 
-const TEMPO = 'Tempo';
+const SWING = 'Swing & tempo';
 const DEVICES = 'Devices';
 
 /** Swing size (body scales) that plays the longest string. */
@@ -27,6 +28,7 @@ const HAND_COLORS: Record<HandState, string> = { open: '#5cffb0', closed: '#ff3b
 
 const params = defineParams({
   output: { type: 'select', options: OUTPUTS, default: 'OP-1 (MIDI)', description: 'Where the notes go: MIDI to the OP-1, or a synth in the browser' },
+  tracking: { type: 'select', options: TRACK_MODES, default: 'arms', description: 'What plays: arm swings (wrists on the skeleton), or each tracked hand moving on its own. Either way only open hands play' },
   repeat: { type: 'toggle', default: true, description: 'Echo each string: it comes back after its own length plus the same length of silence' },
   feedback: { type: 'slider', min: 0, max: 0.99, step: 0.01, default: 0.25, description: 'How slowly the echoes die away: 0 = one repeat, 0.99 = very slow' },
   scale: { type: 'select', options: SCALE_NAMES, default: SCALE_NAMES[0], description: 'Notes the strings are made of' },
@@ -36,16 +38,17 @@ const params = defineParams({
   startOnRoot: { type: 'toggle', default: false, description: 'Up-swings start on the root, down-swings on the root an octave up' },
   minNotes: { type: 'slider', min: 1, max: 12, step: 1, default: 2, description: 'Notes in a string from the smallest swings' },
   maxNotes: { type: 'slider', min: 1, max: 24, step: 1, default: 7, description: 'Notes in a string from the biggest swings (if not above the minimum, the minimum + 1)' },
-  slowest: { type: 'slider', min: 0.5, max: 8, step: 0.1, default: 2, group: TEMPO, description: 'Notes per second for the slowest swings' },
-  fastest: { type: 'slider', min: 4, max: 30, step: 0.5, default: 16, group: TEMPO, description: 'Notes per second for the fastest swings' },
-  minSwing: { type: 'slider', min: 0.5, max: 8, step: 0.1, default: 2, group: TEMPO, description: 'Wrist speed (shoulder widths per second) a movement needs to count as a swing' },
-  fastSwing: { type: 'slider', min: 3, max: 25, step: 0.5, default: 10, group: TEMPO, description: 'Wrist speed that plays at the fastest tempo' },
+  slowest: { type: 'slider', min: 0.5, max: 8, step: 0.1, default: 2, group: SWING, description: 'Notes per second for the slowest swings' },
+  fastest: { type: 'slider', min: 4, max: 30, step: 0.5, default: 16, group: SWING, description: 'Notes per second for the fastest swings' },
+  minSwing: { type: 'slider', min: 0.5, max: 8, step: 0.1, default: 2, group: SWING, description: 'Speed (shoulder widths per second; in hands mode, two hand lengths count as one) a movement needs to count as a swing' },
+  fastSwing: { type: 'slider', min: 3, max: 25, step: 0.5, default: 10, group: SWING, description: 'Speed that plays at the fastest tempo' },
+  smooth: { type: 'slider', min: 0, max: 1, step: 0.01, default: 0.5, group: SWING, description: 'Smooths tracked hand and wrist positions: 0 = raw, 1 = heavy (steadier but slower to react)' },
   camera: { type: 'input', kind: 'camera', default: 'webcam', group: DEVICES, description: 'Camera watching the performers' },
   maxPeople: { type: 'slider', min: 1, max: 4, step: 1, default: 2, group: DEVICES, description: 'People to track (applies when the app reloads)' },
   midiOut: { type: 'input', kind: 'midiOut', default: 'op1', group: DEVICES, description: 'MIDI output in OP-1 mode' },
   channel: { type: 'slider', min: 1, max: 16, step: 1, default: 1, group: DEVICES, description: 'MIDI channel' },
   audioIn: { type: 'input', kind: 'audioIn', default: 'op1', group: DEVICES, description: 'Audio input the echo takes in OP-1 mode' },
-  debug: { type: 'toggle', default: false, description: 'Show the camera, arms and hand states on the output, for tuning' },
+  debug: { type: 'toggle', default: false, description: 'Show the camera, arms or hands and their states on the output, and log each string, for tuning' },
   test: { type: 'trigger', description: 'Play a random string (no camera needed)' },
   stop: { type: 'trigger', description: 'Same as the X pose: all notes off and the echoes cleared' },
 });
@@ -274,25 +277,38 @@ export default defineApp({
       }
       g.lineWidth = Math.max(3, h / 180);
       g.font = `${Math.round(h / 32)}px system-ui`;
-      for (const person of cv.people) {
-        const body = gestures.bodies.get(person.id);
-        const lm = person.landmarks;
-        [[11, 13, 15], [12, 14, 16]].forEach((chain, i) => {
-          const arm = body?.arms[i];
-          g.strokeStyle = HAND_COLORS[arm?.hand ?? 'none'];
+      if (p.tracking === 'hands') {
+        for (const hand of cv.hands) {
+          const th = gestures.hands.get(hand.id);
+          const x = (th?.x ?? hand.landmarks[0].x) * w, y = (th?.y ?? hand.landmarks[0].y) * h;
+          g.strokeStyle = HAND_COLORS[th?.limb.hand ?? 'none'];
           g.beginPath();
-          chain.forEach((k, j) => (j ? g.lineTo(lm[k].x * w, lm[k].y * h) : g.moveTo(lm[k].x * w, lm[k].y * h)));
+          g.arc(x, y, h / 20, 0, Math.PI * 2);
           g.stroke();
-          const wr = lm[chain[2]];
           g.fillStyle = '#fff';
-          g.fillText(`${arm?.hand ?? '—'} ${(arm?.speed ?? 0).toFixed(1)}`, wr.x * w + 8, wr.y * h - 8);
-        });
+          g.fillText(`${th?.limb.hand ?? '—'} ${(th?.limb.speed ?? 0).toFixed(1)}`, x + h / 16, y);
+        }
+      } else {
+        for (const person of cv.people) {
+          const body = gestures.bodies.get(person.id);
+          const lm = person.landmarks;
+          [[11, 13, 15], [12, 14, 16]].forEach((chain, i) => {
+            const arm = body?.arms[i];
+            g.strokeStyle = HAND_COLORS[arm?.hand ?? 'none'];
+            g.beginPath();
+            chain.forEach((k, j) => (j ? g.lineTo(lm[k].x * w, lm[k].y * h) : g.moveTo(lm[k].x * w, lm[k].y * h)));
+            g.stroke();
+            const wr = lm[chain[2]];
+            g.fillStyle = '#fff';
+            g.fillText(`${arm?.hand ?? '—'} ${(arm?.speed ?? 0).toFixed(1)}`, wr.x * w + 8, wr.y * h - 8);
+          });
+        }
       }
       g.fillStyle = gestures.x.latched ? '#ff3b6b' : '#9f9';
       g.font = `${Math.round(h / 36)}px ui-monospace, monospace`;
       const src = p.output === 'Browser synth' ? 'synth' : `midi ${midiOut.connected ? 'ok' : 'NOT CONNECTED'}`;
       g.fillText(
-        `${cv.connected ? `cv ${cv.fps.toFixed(0)} fps` : 'camera not connected'} · ${src} · strings ${strings.length} · echoes ${echoes.length}${gestures.x.active ? ' · X' : ''}`,
+        `${cv.connected ? `cv ${cv.fps.toFixed(0)} fps` : 'camera not connected'} · ${p.tracking} · ${src} · strings ${strings.length} · echoes ${echoes.length}${gestures.x.active ? ' · X' : ''}`,
         h / 40, h - h / 40,
       );
     }
@@ -311,7 +327,7 @@ export default defineApp({
         }
         if (cv.connected && cv.updatedAt !== lastCv) {
           lastCv = cv.updatedAt;
-          const r = gestures.update(cv.people, cv.hands, cv.updatedAt, p.minSwing);
+          const r = gestures.update(cv.people, cv.hands, cv.updatedAt, { mode: p.tracking, minSpeed: p.minSwing, smooth: p.smooth });
           if (r.stop) stopAll('X pose');
           for (const s of r.swings) if (s.open) play(s);
         }

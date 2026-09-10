@@ -195,6 +195,10 @@ export interface Person {
 export type GestureName =
   'None' | 'Closed_Fist' | 'Open_Palm' | 'Pointing_Up' | 'Thumb_Down' | 'Thumb_Up' | 'Victory' | 'ILoveYou';
 export interface Hand {
+  /** Stable while the hand stays tracked. */
+  readonly id: number;
+  /** performance.now() of the result that last updated this hand (under load, hands skip frames). */
+  readonly seen: number;
   readonly handedness: 'Left' | 'Right';
   /** 21 landmarks, normalized image coords. */
   readonly landmarks: readonly Landmark[];

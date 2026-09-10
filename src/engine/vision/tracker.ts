@@ -168,12 +168,14 @@ class HandTrack implements Hand, Track {
   readonly center: Vec2 = { x: 0, y: 0 };
   readonly prev = new Float32Array(HAND_IDX.length * 2);
   hasPrev = false;
+  constructor(readonly id: number) {}
 }
 
 /** Hand speeds (hand-lengths per second) by matching wrists across results. */
 export class HandTracker {
   readonly hands: HandTrack[] = [];
   private tracks: HandTrack[] = [];
+  private nextId = 1;
   private updatedAt = 0;
   private readonly dc = new Float32Array(MAX_DETECTIONS * 2);
   private readonly assign = new Int32Array(MAX_DETECTIONS);
@@ -194,7 +196,7 @@ export class HandTracker {
     for (let h = 0; h < n; h++) {
       let t = this.assign[h] >= 0 ? this.tracks[this.assign[h]] : null;
       if (!t) {
-        t = new HandTrack();
+        t = new HandTrack(this.nextId++);
         this.tracks.push(t);
       }
       this.fill(t, r, h, now, mirrored);
