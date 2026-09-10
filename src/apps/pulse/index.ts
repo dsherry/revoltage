@@ -10,7 +10,7 @@ const params = defineParams({
   colorA: { type: 'color', default: '#ff2a6d', description: 'Main color (APC palette pads)', group: 'Color' },
   colorB: { type: 'color', default: '#05d9e8', description: 'Second color (Shift + palette pad)', group: 'Color' },
   colorC: { type: 'color', default: '#d1f7ff', description: 'Highlight color for rings and onsets', group: 'Color' },
-  hueDrift: { type: 'slider', min: 0, max: 1, default: 0.2, description: 'How much brightness of the sound shifts hue (fader 6)', group: 'Color' },
+  hueDrift: { type: 'slider', min: 0, max: 1, default: 0, description: 'Lets colors wander around the hue wheel with time and the brightness of the sound; 0 = exact colors (fader 6)', group: 'Color' },
   intensity: { type: 'slider', min: 0, max: 2, default: 1, description: 'Overall brightness (fader 1)' },
   speed: { type: 'slider', min: 0, max: 3, default: 1, description: 'Animation speed (fader 2)' },
   zoom: { type: 'slider', min: 0.3, max: 3, default: 1, description: 'Pattern scale (fader 3)' },
@@ -53,7 +53,7 @@ export default defineApp({
     const p = ctx.params;
 
     const bass = smoother(0.1), mid = smoother(0.1), treble = smoother(0.1), level = smoother(0.1), onset = smoother(0.02);
-    let phase = 0, hue = 0, onsetEnv = 0, flash = 0;
+    let phase = 0, hueT = 0, onsetEnv = 0, flash = 0;
     let activePreset = -1;
 
     // --- APC mini: LEDs mirror the current state.
@@ -117,8 +117,9 @@ export default defineApp({
         flash *= Math.exp(-dt * 5);
 
         phase += dt * p.speed * (0.5 + level.value);
-        hue = (hue + dt * p.hueDrift * 0.02) % 1;
-        const hueOffset = hue + mapRange(a.centroid, 500, 5000, 0, 0.15) * p.hueDrift;
+        // Bounded hue wander around the chosen colors (at most ~±0.4 of the wheel at full drift).
+        hueT += dt;
+        const hueOffset = p.hueDrift * (0.25 * Math.sin(hueT * 0.2) + 0.15 * mapRange(a.centroid, 500, 5000, 0, 1));
         const beat = p.beatSync && f.clock.playing ? Math.pow(1 - f.clock.phase, 3) : 0;
         const zoom = p.zoom * (distL.present ? 1 + (1 - distL.value) * 0.8 : 1);
         const warp = p.warp + (distR.present ? (1 - distR.value) * 1.5 : 0);

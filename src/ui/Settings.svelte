@@ -74,6 +74,7 @@
       <button disabled={!chosen} onclick={removePreset}>Delete</button>
       <input placeholder="new preset name" bind:value={newName} onkeydown={(e) => e.key === 'Enter' && savePreset()} />
       <button disabled={!newName.trim()} onclick={savePreset}>Save</button>
+      <button onclick={() => confirm('Reset all settings of this app to their defaults?') && store()?.reset()}>Reset</button>
     </div>
   {:else}
     <div class="title muted">No app loaded</div>

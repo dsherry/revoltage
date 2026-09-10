@@ -85,6 +85,11 @@ export class ParamStore {
     return () => { this.anyListeners.delete(cb); };
   }
 
+  /** Back to the schema defaults. */
+  reset(): void {
+    for (const [k, def] of Object.entries(this.schema)) if (def.type !== 'trigger') this.set(k, defaultOf(def));
+  }
+
   fire(key: string): void {
     if (this.schema[key]?.type !== 'trigger') return;
     this.values[key] = (this.values[key] as number) + 1;
