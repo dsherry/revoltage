@@ -164,7 +164,7 @@ flowchart LR
    - The app renders into a **stage canvas** in the control window. The stage is sized to the output resolution and shown scaled down as the live preview.
    - After each `frame()`, the engine copies the stage into the output window's 2D canvas with `drawImage`, a GPU-to-GPU copy within one process.
    - ⚠ Spike **S1** checks the cost. Fallback: the surface's canvas lives in the output document and the preview becomes a low-fps copy.
-3. **The output window's `requestAnimationFrame` drives the loop** while that window is open. That locks rendering to the projector's refresh, and the loop isn't throttled when the control window is covered. Without an output window, the control window's rAF drives it.
+3. **The output window's `requestAnimationFrame` drives the loop** while that window is open. That locks rendering to the projector's refresh, and the loop isn't throttled when the control window is covered. Without an output window, the control window's rAF drives it. When no window gets rAF (both covered, in another Space, or behind a screen-sharing app), a worker timer keeps frames coming at 60 Hz so audio, MIDI and vision don't stall; Chrome still won't paint hidden windows unless it was launched with `npm run chrome`.
    - Refresh rates differ (120 Hz vs 60 Hz), so all motion uses `dt`.
 4. **Heavy work stays off the main thread.**
    - MediaPipe inference runs in one module worker per camera.
@@ -982,6 +982,7 @@ These were planned as separate test pages in the first hour. Instead, each one i
 
 - [ ] Use a dedicated profile with no extensions.
 - [ ] Settings → Performance: add `localhost:5173` to "Always keep these sites active" (Memory Saver), and turn off Energy Saver.
+- [ ] Launch Chrome with `npm run chrome` (switches off background throttling), so the output keeps drawing when it's covered or in another Space. Needed for screen sharing (Meet, NDI). Confirm under chrome://version → Command Line.
 - [ ] Permissions for `localhost:5173`, all "Allow on every visit": camera, microphone, MIDI (including SysEx), serial port, window management.
 
 **Rig:**

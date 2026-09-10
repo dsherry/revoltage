@@ -10,7 +10,8 @@
     "build": "vite build",
     "show": "vite build && vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
-    "models": "bash scripts/fetch-models.sh"
+    "models": "bash scripts/fetch-models.sh",
+    "chrome": "bash scripts/chrome.sh"
   },
   "repository": {
     "type": "git",

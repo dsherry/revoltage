@@ -12,10 +12,15 @@ npm install
 npm run models   # once: copies the MediaPipe runtime and downloads vision models into public/
 npm run dev      # http://localhost:5173 with hot reload
 npm run show     # production build on the same port, for the performance
+npm run chrome   # (re)opens Chrome on it with background throttling off
 ```
 
 1. Open http://localhost:5173 in Chrome and click **Start** (allow microphone, MIDI and camera).
 2. Press **O** to open the output window, drag it to the projector, then click inside it (or press **F**) for fullscreen.
+
+**Screen sharing (Google Meet, NDI):** open Chrome with `npm run chrome`. Otherwise Chrome stops
+drawing the output window whenever it's covered, in another Space or behind the sharing app, and the
+share freezes. The script asks before quitting a running Chrome (a Meet call in Chrome will drop).
 
 ## Keys (control window)
 
