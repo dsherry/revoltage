@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { SceneFactory } from './types';
+import type { ForestScene, SceneContext, SceneFactory } from './types';
 import { BG_FRAG, BG_VERT, CHLORO_FRAG, CHLORO_VERT, MAX_CELLS, NODE_FRAG, NODE_VERT } from './chloroplast-shaders';
 
 const PER_CELL = 64;
@@ -13,6 +13,7 @@ const GROW = 0.04;
 const GONE = 4; // additive distance offset that shrinks a cell away entirely
 const WALL_MARGIN = 0.035; // wall wobble + wall glow + half a chloroplast
 const MAX_ORBIT = 0.5;
+const BIRTH_FLASH = 0.7;
 
 const halton = (i: number, b: number) => {
   let f = 1, r = 0;
@@ -21,9 +22,21 @@ const halton = (i: number, b: number) => {
 };
 const smooth01 = (x: number) => x * x * (3 - 2 * x);
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
+const rainbow = (h: number, shift: number) => 0.5 + 0.5 * Math.cos(Math.PI * 2 * (h + shift));
+
+export interface ChloroplastOptions {
+  /** Shiny Cell: iridescent and glittering, more reactive and electric, with cells born and dying (churn). */
+  shiny?: boolean;
+}
 
 /** Chloroplast Flow: plant cells with streaming chloroplasts, light shafts and electron sparks on each hit. */
-export const createChloroplast: SceneFactory = (ctx) => {
+export const createChloroplast: SceneFactory = (ctx) => buildChloroplast(ctx);
+
+/** Shiny Cell: a more colorful, shimmering, electric Chloroplast Flow whose cells keep being born and dying. */
+export const createShinyCell: SceneFactory = (ctx) => buildChloroplast(ctx, { shiny: true });
+
+export function buildChloroplast(ctx: SceneContext, opts: ChloroplastOptions = {}): ForestScene {
+  const shiny = !!opts.shiny;
   const scene = new THREE.Scene();
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -1, 1);
   let aspect = ctx.width / ctx.height;
@@ -39,11 +52,18 @@ export const createChloroplast: SceneFactory = (ctx) => {
     wanF[c * 4 + 3] = Math.random() * Math.PI * 2;
     cellDir[c] = Math.random() < 0.5 ? -1 : 1;
   }
-  const placeSeeds = () => {
+  let placed = false;
+  // First call lays out Halton seeds; later resizes stretch them horizontally (keeps reborn cells in place).
+  const placeSeeds = (oldAspect: number) => {
     for (let c = 0; c < MAX_CELLS; c++) {
-      baseX[c] = (halton(c + 1, 2) * 2 - 1) * aspect * 1.02;
-      baseY[c] = (halton(c + 1, 3) * 2 - 1) * 1.02;
+      if (placed) {
+        baseX[c] *= aspect / oldAspect;
+      } else {
+        baseX[c] = (halton(c + 1, 2) * 2 - 1) * aspect * 1.02;
+        baseY[c] = (halton(c + 1, 3) * 2 - 1) * 1.02;
+      }
     }
+    placed = true;
   };
   const cx = new Float64Array(MAX_CELLS), cy = new Float64Array(MAX_CELLS);
   const cr = new Float64Array(MAX_CELLS); // orbit radius: inscribed circle minus a margin
@@ -51,6 +71,7 @@ export const createChloroplast: SceneFactory = (ctx) => {
   const coff = new Float64Array(MAX_CELLS); // additive Voronoi offset
   const weight = new Float64Array(MAX_CELLS);
   const exc = new Float64Array(MAX_CELLS);
+  const alive = new Uint8Array(MAX_CELLS); // Shiny Cell: which cells are currently alive
   const seedU = new Float32Array(MAX_CELLS * 4);
   const cellU = new Float32Array(MAX_CELLS * 4);
 
@@ -68,6 +89,7 @@ export const createChloroplast: SceneFactory = (ctx) => {
     uColC: { value: new THREE.Color() },
     uIntensity: { value: 1 },
     uPx: { value: ctx.height / 2 },
+    uShiny: { value: shiny ? 1 : 0 },
   };
 
   // --- Background: full-screen Voronoi cells + light shafts.
@@ -79,6 +101,10 @@ export const createChloroplast: SceneFactory = (ctx) => {
       ...u,
       uSeeds: { value: seedU },
       uPulse: { value: 1 },
+      uCharge: { value: 0 },
+      uHit: { value: 0 },
+      uLvl: { value: 0 },
+      uTreb: { value: 0 },
     },
     depthTest: false,
     depthWrite: false,
@@ -170,12 +196,13 @@ export const createChloroplast: SceneFactory = (ctx) => {
   const hopA = new Int32Array(MAX_HOPS), hopB = new Int32Array(MAX_HOPS);
   const hopAge = new Float64Array(MAX_HOPS).fill(SPARK_LIFE);
   const hopStr = new Float64Array(MAX_HOPS);
+  const hopHue = new Float64Array(MAX_HOPS);
   const hopFirst = new Uint8Array(MAX_HOPS);
   let hopHead = 0;
   const chain = new Int32Array(16);
 
   // --- State.
-  let flow = 0, fill = 0, clock = 0;
+  let flow = 0, fill = 0, clock = 0, hit = 0;
   let handAmt = 0, hx = 0, hy = 0, maskOn = 0;
   let first = true;
 
@@ -230,6 +257,7 @@ export const createChloroplast: SceneFactory = (ctx) => {
   const spawnChain = (hops: number, strength: number) => {
     let k = pickStart();
     if (k < 0) return;
+    const hue = Math.random();
     chain[0] = k;
     let len = 1;
     for (let h = 0; h < hops && len < chain.length; h++) {
@@ -241,18 +269,60 @@ export const createChloroplast: SceneFactory = (ctx) => {
       hopB[s] = next;
       hopAge[s] = -h * HOP_DELAY;
       hopStr[s] = strength;
+      hopHue[s] = hue;
       hopFirst[s] = h === 0 ? 1 : 0;
       chain[len++] = next;
       k = next;
     }
   };
 
+  // --- Shiny Cell turnover: cells die away and new ones grow into the biggest gap.
+  const isFree = (c: number) => !alive[c] && weight[c] < 0.02;
+  const kill = () => {
+    let n = 0;
+    for (let c = 0; c < MAX_CELLS; c++) n += alive[c];
+    let pick = Math.floor(Math.random() * n);
+    for (let c = 0; c < MAX_CELLS; c++) {
+      if (!alive[c] || pick-- > 0) continue;
+      alive[c] = 0;
+      exc[c] = Math.max(exc[c], 0.35);
+      return;
+    }
+  };
+  const birth = (): boolean => {
+    let c = -1;
+    const start = Math.floor(Math.random() * MAX_CELLS);
+    for (let j = 0; j < MAX_CELLS; j++) {
+      const k = (start + j) % MAX_CELLS;
+      if (isFree(k)) { c = k; break; }
+    }
+    if (c < 0) return false;
+    // Best of a few random spots: the one farthest from every living cell.
+    let bx = 0, by = 0, best = -1;
+    for (let t = 0; t < 10; t++) {
+      const x = (Math.random() * 2 - 1) * aspect, y = Math.random() * 2 - 1;
+      let m = Infinity;
+      for (let j = 0; j < MAX_CELLS; j++) if (alive[j]) m = Math.min(m, Math.hypot(cx[j] - x, cy[j] - y));
+      if (m > best) { best = m; bx = x; by = y; }
+    }
+    baseX[c] = bx;
+    baseY[c] = by;
+    alive[c] = 1;
+    exc[c] = BIRTH_FLASH;
+    return true;
+  };
+  const hasFree = () => {
+    for (let c = 0; c < MAX_CELLS; c++) if (isFree(c)) return true;
+    return false;
+  };
+
   const resize = (w: number, h: number) => {
+    const oldAspect = aspect;
     aspect = w / h;
     camera.left = -aspect;
     camera.right = aspect;
     camera.updateProjectionMatrix();
-    placeSeeds();
+    placeSeeds(oldAspect);
     u.uAspect.value = aspect;
     u.uPx.value = h / 2;
     nodeMat.uniforms.uSize.value = 0.045 * u.uPx.value;
@@ -264,18 +334,32 @@ export const createChloroplast: SceneFactory = (ctx) => {
     camera,
     update(i) {
       const rdt = i.realDt;
+      const level = Math.min(i.level, 1.5);
       clock += rdt;
-      flow += i.dt * (0.6 + 0.8 * Math.min(i.level, 1.5));
+      flow += i.dt * (0.6 + (shiny ? 1.4 : 0.8) * level);
 
-      // Cells: active count from density; cells grow in / shrink away over a few seconds.
-      const active = Math.round(8 + 16 * i.density);
-      const ease = first ? 1 : 1 - Math.exp(-rdt * 0.8);
+      // Cells. Chloroplast Flow: the first N (by density) are alive. Shiny Cell: a set of living
+      // cells that keeps turning over (churn); hits can trigger a turnover too.
+      let target = Math.round(8 + 16 * i.density);
+      if (shiny) {
+        target = Math.min(target, MAX_CELLS - 4); // keep free cells for births
+        if (first) for (let c = 0; c < MAX_CELLS; c++) alive[c] = c < target ? 1 : 0;
+        let count = 0;
+        for (let c = 0; c < MAX_CELLS; c++) count += alive[c];
+        while (count > target) { kill(); count--; }
+        while (count < target && birth()) count++;
+        const turnover = Math.random() < i.churn * i.churn * 3 * rdt || (i.onset && Math.random() < i.churn);
+        if (turnover && count > 2 && hasFree()) { kill(); birth(); }
+      }
+      const ease = first ? 1 : 1 - Math.exp(-rdt * (shiny ? 2.2 : 0.8));
+      const breathe = shiny ? 1 + 0.05 * i.bass : 1;
       for (let c = 0; c < MAX_CELLS; c++) {
-        weight[c] += ((c < active ? 1 : 0) - weight[c]) * ease;
+        const on = shiny ? alive[c] === 1 : c < target;
+        weight[c] += ((on ? 1 : 0) - weight[c]) * ease;
         cw[c] = smooth01(clamp01(weight[c]));
         coff[c] = (1 - cw[c]) * GONE;
-        cx[c] = baseX[c] + 0.07 * Math.sin(i.t * wanF[c * 4] + wanF[c * 4 + 2]);
-        cy[c] = baseY[c] + 0.07 * Math.sin(i.t * wanF[c * 4 + 1] + wanF[c * 4 + 3]);
+        cx[c] = (baseX[c] + 0.07 * Math.sin(i.t * wanF[c * 4] + wanF[c * 4 + 2])) * breathe;
+        cy[c] = (baseY[c] + 0.07 * Math.sin(i.t * wanF[c * 4 + 1] + wanF[c * 4 + 3])) * breathe;
         exc[c] *= Math.exp(-rdt * 3);
       }
       // Distance from a seed to its (additively weighted) cell boundary is min over neighbours of (D + cj - ci) / 2.
@@ -292,12 +376,20 @@ export const createChloroplast: SceneFactory = (ctx) => {
         }
         cr[c] = Math.max(0, m - WALL_MARGIN);
       }
-      const perCell = (300 + 1200 * i.density) / active;
+      const perCell = (300 + 1200 * i.density) / target;
       fill += (perCell / PER_CELL - fill) * (first ? 1 : 1 - Math.exp(-rdt * 1.5));
       first = false;
 
       // Sparks first so their cell excitation lands in this frame's uniforms.
-      if (i.onset) spawnChain(Math.round(2 + i.charge * 8 * i.onsetStrength), 0.4 + 0.6 * i.onsetStrength);
+      if (i.onset) {
+        const chains = shiny ? 1 + Math.floor(i.charge * 2.5 * i.onsetStrength + 0.5) : 1;
+        const hops = shiny ? Math.round(3 + i.charge * 12 * i.onsetStrength) : Math.round(2 + i.charge * 8 * i.onsetStrength);
+        for (let n = 0; n < chains; n++) spawnChain(hops, 0.4 + 0.6 * i.onsetStrength);
+      }
+      // Shiny Cell also throws off stray sparks while the music is loud.
+      if (shiny && Math.random() < rdt * i.charge * (0.5 + 3 * level)) spawnChain(Math.round(2 + 4 * i.charge), 0.3 + 0.4 * Math.min(level, 1));
+      hit = Math.max(hit * Math.exp(-rdt * 6), i.onset ? i.onsetStrength : 0);
+
       const cC = i.colorC;
       let lv = 0, nv = 0;
       for (let s = 0; s < MAX_HOPS; s++) {
@@ -317,7 +409,14 @@ export const createChloroplast: SceneFactory = (ctx) => {
         const ex = ax + (ox - ax) * grow, ey = ay + (oy - ay) * grow;
         const fade = (1 - age / SPARK_LIFE) ** 2;
         const br = (1.2 + 2.3 * str) * fade * i.intensity * (0.75 + 0.5 * Math.random());
-        const r = (cC.r + 0.25) * br, g = (cC.g + 0.25) * br, b = (cC.b + 0.25) * br;
+        let r = (cC.r + 0.25) * br, g = (cC.g + 0.25) * br, b = (cC.b + 0.25) * br;
+        if (shiny) {
+          // Each chain gets its own hue, mixed with the electric color.
+          const h = hopHue[s];
+          r = r * 0.5 + rainbow(h, 0) * 0.7 * br;
+          g = g * 0.5 + rainbow(h, 0.33) * 0.7 * br;
+          b = b * 0.5 + rainbow(h, 0.67) * 0.7 * br;
+        }
         const dx = ex - ax, dy = ey - ay, len = Math.hypot(dx, dy) || 1;
         const nx = -dy / len, ny = dx / len, amp = len * 0.18;
         let px = ax, py = ay;
@@ -375,7 +474,7 @@ export const createChloroplast: SceneFactory = (ctx) => {
       maskOn += ((i.mask ? 1 : 0) - maskOn) * (1 - Math.exp(-rdt * 3));
 
       u.uTime.value = i.t;
-      u.uShaft.value = i.light * (0.3 + Math.min(i.level, 1.5));
+      u.uShaft.value = i.light * (0.3 + level);
       u.uHand.value.set(hx, hy, handAmt * 0.85);
       u.uMaskOn.value = maskOn;
       u.uMaskMirror.value = i.maskMirrored ? 1 : 0;
@@ -383,7 +482,14 @@ export const createChloroplast: SceneFactory = (ctx) => {
       u.uColB.value.copy(i.colorB);
       u.uColC.value.copy(i.colorC);
       u.uIntensity.value = i.intensity;
-      bgMat.uniforms.uPulse.value = 0.8 + 0.5 * i.bass + 0.15 * i.beat + 0.07 * Math.sin(clock * 0.5);
+      const bu = bgMat.uniforms;
+      bu.uPulse.value = shiny
+        ? 0.8 + 1.1 * i.bass + 0.3 * i.beat + 0.1 * Math.sin(clock * 0.9)
+        : 0.8 + 0.5 * i.bass + 0.15 * i.beat + 0.07 * Math.sin(clock * 0.5);
+      bu.uCharge.value = i.charge;
+      bu.uHit.value = hit;
+      bu.uLvl.value = level;
+      bu.uTreb.value = i.treble;
       const pu = pMat.uniforms;
       pu.uFlow.value = flow;
       pu.uFill.value = fill;
@@ -399,4 +505,4 @@ export const createChloroplast: SceneFactory = (ctx) => {
       nodeGeo.dispose(); nodeMat.dispose();
     },
   };
-};
+}

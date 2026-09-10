@@ -6,17 +6,18 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { APC_PALETTE, apcColorPad, clamp, defineApp, defineParams, smoother, type ApcColor, type VisionHandle } from '@sdk';
 import type { ForestInputs, ForestScene, SceneFactory } from './types';
 import { createCanopy } from './canopy';
-import { createChloroplast } from './chloroplast';
+import { createChloroplast, createShinyCell } from './chloroplast';
 import { createLightning } from './lightning';
 import { createLightningChase } from './lightning-chase';
 
-const SCENES = ['canopy', 'chloroplast', 'lightning', 'lightning-chase'] as const;
+const SCENES = ['canopy', 'chloroplast', 'lightning', 'lightning-chase', 'shiny-cell'] as const;
 type SceneName = (typeof SCENES)[number];
 const FACTORIES: Record<SceneName, SceneFactory> = {
   canopy: createCanopy,
   chloroplast: createChloroplast,
   lightning: createLightning,
   'lightning-chase': createLightningChase,
+  'shiny-cell': createShinyCell,
 };
 const FADERS = 'APC faders 1–8';
 
@@ -30,11 +31,12 @@ const params = defineParams({
   charge: { type: 'slider', min: 0, max: 1, default: 0.6, description: 'Electricity: how many pulses, sparks or bolts each note makes (fader 6)', group: FADERS },
   light: { type: 'slider', min: 0, max: 1, default: 0.6, description: 'Sun, light shafts and sky brightness (fader 7)', group: FADERS },
   life: { type: 'slider', min: 0, max: 1, default: 0.5, description: 'Fireflies and particles (fader 8)', group: FADERS },
-  scene: { type: 'select', options: SCENES, default: 'canopy', description: 'Canopy Current, Chloroplast Flow, Lightning Forest, or Lightning Chase: wolves chased by huge penguins on each strike (APC pad row 2, pads 1–4)' },
+  scene: { type: 'select', options: SCENES, default: 'canopy', description: 'Canopy Current, Chloroplast Flow, Lightning Forest, Lightning Chase (wolves chased by huge penguins on each strike) or Shiny Cell (APC pad row 2, pads 1–5)' },
   colorA: { type: 'color', default: '#3ddc84', description: 'Life: leaves, chloroplasts, forest tint (APC pad rows 3–4)' },
   colorB: { type: 'color', default: '#ffc94d', description: 'Light: sunlit leaves, cell walls, fireflies (APC pad rows 5–6)' },
   colorC: { type: 'color', default: '#7fd4ff', description: 'Electric: pulses, electron sparks, lightning (APC pad rows 7–8)' },
   strike: { type: 'trigger', description: 'Force an electrical strike (APC track button 1)' },
+  churn: { type: 'slider', min: 0, max: 1, default: 0.4, description: 'Shiny Cell: how often cells are born and die (hits can spawn cells too)' },
   parade: { type: 'toggle', default: false, description: 'Lightning Chase: each chase is followed by a turtle and a sloth parading with colorful flags' },
   useCamera: {
     type: 'select', options: ['off', 'hand', 'body'], default: 'off',
@@ -100,7 +102,7 @@ export default defineApp({
       t: 0, dt: 0, realDt: 0, level: 0, bass: 0, mid: 0, treble: 0,
       onset: false, onsetStrength: 0, pitch: null, beat: 0, hand: null, mask: null, maskMirrored: false,
       colorA: new THREE.Color(), colorB: new THREE.Color(), colorC: new THREE.Color(),
-      intensity: 1, density: 0.6, charge: 0.6, light: 0.6, life: 0.5, parade: false,
+      intensity: 1, density: 0.6, charge: 0.6, light: 0.6, life: 0.5, parade: false, churn: 0.4,
     };
     const level = smoother(0.2), bass = smoother(0.2), mid = smoother(0.2), treble = smoother(0.2);
     const handX = smoother(0.15, 0.5), handY = smoother(0.15, 0.5);
@@ -193,6 +195,7 @@ export default defineApp({
         inputs.light = p.light;
         inputs.life = p.life;
         inputs.parade = p.parade;
+        inputs.churn = p.churn;
 
         let scene: { scene: THREE.Scene; camera: THREE.Camera } = blank;
         try {

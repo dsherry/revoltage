@@ -47,6 +47,8 @@ export interface ForestInputs {
   life: number;
   /** Lightning Chase: each chase is followed by a turtle and a sloth parading with flags. */
   parade: boolean;
+  /** Shiny Cell: 0..1 how often cells are born and die. */
+  churn: number;
 }
 
 export interface SceneContext {

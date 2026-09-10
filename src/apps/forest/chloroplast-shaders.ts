@@ -61,7 +61,15 @@ uniform vec3 uColB;
 uniform vec3 uColC;
 uniform float uIntensity;
 uniform float uPulse;
+// Shiny Cell only (0 for Chloroplast Flow).
+uniform float uShiny;
+uniform float uCharge;
+uniform float uHit;
+uniform float uLvl;
+uniform float uTreb;
 ${LIGHT}
+
+vec3 rainbow(float h) { return 0.5 + 0.5 * cos(6.2831853 * (h + vec3(0.0, 0.33, 0.67))); }
 
 void main() {
   vec2 p = vec2((vUv.x * 2.0 - 1.0) * uAspect, vUv.y * 2.0 - 1.0);
@@ -103,6 +111,24 @@ void main() {
   col += mix(uColA, uColB, 0.5) * 0.05 * memb * wl;
   col += uColC * max(exc1, exc2) * (0.9 * core + 0.18 * halo);
 
+  if (uShiny > 0.0) {
+    float hue = rnd + uTime * 0.02;
+    vec3 cellCol = rainbow(hue);
+    // Colorful interiors that swell with the level.
+    col += cellCol * (0.03 + 0.12 * uLvl) * tex * (0.4 + 0.6 * rim);
+    // Iridescent walls: the hue shifts across the wall and over time, like a soap film.
+    vec3 film = rainbow(hue + wall * 9.0 + uTime * 0.15);
+    col += film * (0.45 * core + 0.12 * halo) * wl * (0.6 + 0.8 * uLvl);
+    // Glitter: sparse sparkles that twinkle faster with treble.
+    float g = noise(p * 70.0 + vec2(uTime * (2.0 + 6.0 * uTreb), -uTime * 1.3));
+    col += film * pow(g, 12.0) * (0.6 + 2.5 * uTreb) * (0.5 + halo);
+    // Electricity crawling along the walls.
+    float arc = step(0.78 - 0.18 * uCharge, noise(q * 26.0 + vec2(uTime * 9.0, -uTime * 7.0)));
+    col += uColC * arc * core * uCharge * (0.4 + 1.6 * uLvl + 2.0 * uHit);
+    // The whole field flashes on hits.
+    col += cellCol * uHit * 0.12 * (0.3 + rim);
+  }
+
   // Volumetric haze of the shafts over everything.
   col += mix(uColB, vec3(1.0), 0.35) * uShaft * shafts(p) * 0.05;
 
@@ -124,6 +150,7 @@ uniform float uTreble;
 uniform float uIntensity;
 uniform vec3 uColA;
 uniform vec3 uColB;
+uniform float uShiny;
 varying vec3 vCol;
 varying vec2 vRot;
 ${LIGHT}
@@ -152,6 +179,14 @@ void main() {
   float breath = 0.3 + 0.45 * uLevel + 0.06 * sin(uClock * 0.8 + rnd * 6.2831853);
   float shimmer = 1.0 + uTreble * 0.9 * (0.5 + 0.5 * sin(uClock * (9.0 + 8.0 * rnd) + rnd * 50.0));
   vCol = base * breath * (0.7 + 1.1 * l) * shimmer * uIntensity * vis;
+  if (uShiny > 0.0) {
+    // Rainbow chloroplasts that twinkle hard with treble and grow with the level.
+    vec3 rb = 0.5 + 0.5 * cos(6.2831853 * (rnd + uClock * 0.05 + aOrbit.x * 0.13 + vec3(0.0, 0.33, 0.67)));
+    float tw = 0.5 + 0.5 * sin(uClock * (14.0 + 12.0 * rnd) + rnd * 80.0);
+    vec3 shinyCol = rb * (0.35 + 0.9 * uLevel) * (0.8 + 1.6 * uTreble * tw) * (0.7 + 1.1 * l) * uIntensity * vis;
+    vCol = mix(vCol, shinyCol, 0.75 * uShiny);
+    gl_PointSize *= 1.0 + 0.5 * uLevel;
+  }
 }`;
 
 export const CHLORO_FRAG = `
