@@ -37,7 +37,7 @@ const params = defineParams({
   colorC: { type: 'color', default: '#7fd4ff', description: 'Electric: pulses, electron sparks, lightning (APC pad rows 7–8)' },
   strike: { type: 'trigger', description: 'Force an electrical strike (APC track button 1)' },
   sensitivity: { type: 'slider', min: 0, max: 1, default: 0.8, description: 'Input sensitivity: 0 = only very loud sound gets through, 1 = everything, even quiet sounds' },
-  churn: { type: 'slider', min: 0, max: 1, default: 0.4, description: 'Shiny Cell: how often cells divide and die; sustained sound grows the colony and speeds this up (hits can trigger it too)' },
+  churn: { type: 'slider', min: 0, max: 1, default: 0.4, description: 'Shiny Cell: division rate. Divisions per second = 8 × churn × input level (the Mixer meter reading, 0..1)' },
   parade: { type: 'toggle', default: false, description: 'Lightning Chase: each chase is followed by a turtle and a sloth parading with colorful flags' },
   useCamera: {
     type: 'select', options: ['off', 'hand', 'body'], default: 'off',
@@ -101,13 +101,14 @@ export default defineApp({
 
     const inputs: ForestInputs = {
       t: 0, dt: 0, realDt: 0, level: 0, bass: 0, mid: 0, treble: 0,
-      onset: false, onsetStrength: 0, pitch: null, beat: 0, hand: null, mask: null, maskMirrored: false,
+      onset: false, onsetStrength: 0, loudness: 0, pitch: null, beat: 0, hand: null, mask: null, maskMirrored: false,
       colorA: new THREE.Color(), colorB: new THREE.Color(), colorC: new THREE.Color(),
       intensity: 1, density: 0.6, charge: 0.6, light: 0.6, life: 0.5, parade: false, churn: 0.4,
     };
     const level = smoother(0.2), bass = smoother(0.2), mid = smoother(0.2), treble = smoother(0.2);
     const handX = smoother(0.15, 0.5), handY = smoother(0.15, 0.5);
     const gate = smoother(0.1);
+    const loud = smoother(0.15);
     const handPos = { x: 0.5, y: 0.5 };
     let glowBoost = 0;
     let activePreset = -1;
@@ -162,6 +163,7 @@ export default defineApp({
         inputs.bass = bass.update(a.bassAuto * g, f.dt, tau);
         inputs.mid = mid.update(a.midAuto * g, f.dt, tau);
         inputs.treble = treble.update(a.trebleAuto * g, f.dt, tau);
+        inputs.loudness = loud.update(a.level * g, f.dt);
 
         const strike = f.fired('strike');
         inputs.onset = strike || (a.onset && g > 0.5 && p.charge > 0.02);

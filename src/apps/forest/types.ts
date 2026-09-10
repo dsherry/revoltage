@@ -17,6 +17,11 @@ export interface ForestInputs {
   onset: boolean;
   /** 0..1. */
   onsetStrength: number;
+  /**
+   * Real input level on the Mixer meter's 0..1 scale (-60..0 dBFS), gated by sensitivity and lightly
+   * smoothed. Not loudness-normalized: use it when "more sound" should mean "more of something".
+   */
+  loudness: number;
   /** Pitch of the hit on a log scale, 0 = C2 … 1 = C7, when a clear pitch was detected. */
   pitch: number | null;
   /** 1 on each clock beat decaying to 0; 0 when the clock is stopped. */

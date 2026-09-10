@@ -14,6 +14,8 @@ const GONE = 4; // additive distance offset that shrinks a cell away entirely
 const WALL_MARGIN = 0.035; // wall wobble + wall glow + half a chloroplast
 const MAX_ORBIT = 0.5;
 const BIRTH_FLASH = 0.7;
+/** Shiny Cell: divisions per second at churn 1 and a full-scale input level. */
+const DIVISION_RATE = 8;
 
 const halton = (i: number, b: number) => {
   let f = 1, r = 0;
@@ -204,7 +206,7 @@ export function buildChloroplast(ctx: SceneContext, opts: ChloroplastOptions = {
   const chain = new Int32Array(16);
 
   // --- State.
-  let flow = 0, fill = 0, clock = 0, hit = 0, act = 0, divTimer = 0;
+  let flow = 0, fill = 0, clock = 0, hit = 0, act = 0, divAcc = 0;
   let handAmt = 0, hx = 0, hy = 0, maskOn = 0;
   let first = true;
 
@@ -380,31 +382,24 @@ export function buildChloroplast(ctx: SceneContext, opts: ChloroplastOptions = {
       // cells that keeps turning over (churn); hits can trigger a turnover too.
       let target = Math.round(8 + 16 * i.density);
       if (shiny) {
-        // Sustained sound (the level smoothed over ~0.6 s) grows the colony by division; silence lets it die back.
-        act += (Math.min(level, 1.2) - act) * (1 - Math.exp(-rdt / 0.6));
-        target = Math.min(MAX_CELLS - 3, Math.round(6 + 12 * i.density + act * (3 + 9 * i.churn)));
+        // Sustained sound (real level smoothed over ~0.6 s) drives the extra sparks and wall crackle below.
+        act += (i.loudness - act) * (1 - Math.exp(-rdt / 0.6));
+        target = Math.min(MAX_CELLS - 4, target); // keep free cells for divisions
         if (first) for (let c = 0; c < MAX_CELLS; c++) alive[c] = c < target ? 1 : 0;
         let count = 0;
         for (let c = 0; c < MAX_CELLS; c++) count += alive[c];
-        // One division or death at a time, so growth cascades instead of popping.
-        divTimer -= rdt;
-        if (divTimer <= 0 && count !== target) {
-          if (count < target) {
-            if (divide(i.t)) {
-              count++;
-              divTimer = 0.18 - 0.12 * Math.min(act, 1);
-              spawnChain(3 + Math.round(3 * i.charge), 0.5);
-            }
-          } else {
-            kill();
-            count--;
-            divTimer = 0.4;
-          }
+        // Density changes: retire extras (they fade out) or fill gaps, one per frame.
+        while (count > target) { kill(); count--; }
+        if (count < target && birth()) count++;
+        // Divisions per second = DIVISION_RATE × churn × loudness, counted exactly (no dice): twice the
+        // sound, twice the divisions; silence, none. Each division retires an older cell, so the
+        // colony's size stays set by density. The counter holds a few owed divisions if no cell is free yet.
+        divAcc = Math.min(3, divAcc + rdt * DIVISION_RATE * i.churn * i.loudness);
+        while (divAcc >= 1 && hasFree() && divide(i.t)) {
+          divAcc -= 1;
+          spawnChain(3 + Math.round(3 * i.charge), 0.5);
+          kill();
         }
-        // Turnover (a division plus a death) runs faster with sustained sound; hits can trigger it too.
-        const rate = i.churn * i.churn * 3 * (0.3 + 2.5 * act);
-        const turnover = Math.random() < rate * rdt || (i.onset && Math.random() < Math.min(1, i.churn + 0.5 * act));
-        if (turnover && count > 2 && hasFree() && divide(i.t)) kill();
       }
       const ease = first ? 1 : 1 - Math.exp(-rdt * (shiny ? 2.2 : 0.8));
       const breathe = shiny ? 1 + 0.05 * i.bass : 1;
