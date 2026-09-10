@@ -936,6 +936,7 @@ Once M1 fixes the SDK contracts, M3, M4, M7 and M8 are independent behind their 
 | M7 sensors | Waiting: the Arduino code gets its own session. Wiring guide is in [ARDUINO.md](ARDUINO.md). |
 | M8 vision | Done; Vision Check app added for testing. Not yet tried with a real camera. |
 | M9 | The `three` surface works; the `p5` surface and the audio recorder are not built yet. |
+| Extra apps | **Forest** (three.js + bloom), with three scenes switched from APC row 2: Canopy Current, Chloroplast Flow and Lightning Forest. **Vision Check** tests the camera setup. |
 | M10 | Not started. |
 | Tests | Vitest is not installed: npm 11.4.2 crashes resolving its peer dependencies. |
 
