@@ -52,9 +52,11 @@ void main() {
     float aa = abs(mod(a + uTime * 0.1, seg) - seg * 0.5);
     q = vec2(cos(aa), sin(aa)) * r;
   } else if (uMode == 2) {
-    q = vec2(a / 3.14159, 0.3 / max(r, 0.02) + uTime * 0.5);
+    // Tunnel: sample around a circle (cos/sin of the angle) so there's no seam where atan wraps.
+    float depth = 0.3 / max(r, 0.02) + uTime * 0.5;
+    q = vec2(cos(a), sin(a)) * 1.2 + vec2(depth, depth * 0.6);
   }
-  q *= uZoom * (1.0 + 0.35 * uBass);
+  q *= uZoom * (1.0 + 0.12 * uBass);
 
   vec2 w = vec2(fbm(q * 1.5 + uTime * 0.15), fbm(q * 1.5 - uTime * 0.12 + 5.2));
   float n = fbm(q * 2.0 + uWarp * (w - 0.5) * (2.0 + 2.0 * uMid) + uTime * 0.05);
@@ -63,7 +65,7 @@ void main() {
   vec3 col = mix(uColA, uColB, smoothstep(0.2, 0.8, n));
   col = mix(col, uColC, smoothstep(0.6, 1.0, rings * 0.5 + 0.5) * (0.3 + uTreble));
   col *= (0.25 + uLevel * 1.5) * uIntensity * (1.0 + 0.25 * uBeat);
-  col += uOnset * 0.6 * uColC;
+  col += uOnset * 0.35 * uColC;
   col = hueRotate(col, uHue);
 
   // Feedback: last frame, pulled toward the center and slightly rotated.

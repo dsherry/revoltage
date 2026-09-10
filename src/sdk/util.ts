@@ -13,8 +13,9 @@ export function smoother(tau: number, initial = 0) {
   let v = initial;
   return {
     get value() { return v; },
-    update(target: number, dt: number): number {
-      v += (target - v) * (1 - Math.exp(-dt / Math.max(tau, 1e-4)));
+    /** Pass `tauOverride` to change the time constant per call (e.g. from a param). */
+    update(target: number, dt: number, tauOverride = tau): number {
+      v += (target - v) * (1 - Math.exp(-dt / Math.max(tauOverride, 1e-4)));
       return v;
     },
     reset(x = 0) { v = x; },

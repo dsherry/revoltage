@@ -18,6 +18,7 @@ const params = defineParams({
   feedback: { type: 'slider', min: 0, max: 0.98, default: 0.85, description: 'Trail length (fader 5)' },
   bassSens: { type: 'slider', min: 0, max: 3, default: 1, description: 'Bass → zoom pulse (fader 7)', group: 'Reactivity' },
   onsetSens: { type: 'slider', min: 0, max: 3, default: 1, description: 'Onset → flash strength (fader 8)', group: 'Reactivity' },
+  smoothing: { type: 'slider', min: 0, max: 1, default: 0.35, description: 'Smooths the response to audio: higher is calmer, lower is snappier', group: 'Reactivity' },
   beatSync: { type: 'toggle', default: false, description: 'Pulse with the clock beat (APC pad row 7, pad 8)', group: 'Reactivity' },
   center: { type: 'xy', default: { x: 0.5, y: 0.5 }, min: 0, max: 1, description: 'Center of the pattern and feedback zoom' },
   flash: { type: 'trigger', description: 'White flash (APC track button 1)' },
@@ -51,7 +52,7 @@ export default defineApp({
     const apc = ctx.midi.apc;
     const p = ctx.params;
 
-    const bass = smoother(0.08), mid = smoother(0.15), treble = smoother(0.1), level = smoother(0.1);
+    const bass = smoother(0.1), mid = smoother(0.1), treble = smoother(0.1), level = smoother(0.1), onset = smoother(0.02);
     let phase = 0, hue = 0, onsetEnv = 0, flash = 0;
     let activePreset = -1;
 
@@ -103,12 +104,15 @@ export default defineApp({
       frame(f) {
         const a = audio.features;
         const dt = f.dt;
-        bass.update(clamp(a.bassAuto * p.bassSens, 0, 2), dt);
-        mid.update(a.midAuto, dt);
-        treble.update(a.trebleAuto, dt);
-        level.update(a.levelAuto, dt);
+        // Smoothing slows both how fast the visuals follow the audio and how fast onset flashes fade.
+        const tau = 0.03 + p.smoothing * 0.6;
+        bass.update(clamp(a.bassAuto * p.bassSens, 0, 2), dt, tau);
+        mid.update(a.midAuto, dt, tau);
+        treble.update(a.trebleAuto, dt, tau);
+        level.update(a.levelAuto, dt, tau);
         if (a.onset) onsetEnv = Math.max(onsetEnv, 0.4 + 0.6 * a.onsetStrength);
-        onsetEnv *= Math.exp(-dt * 8);
+        onsetEnv *= Math.exp(-dt * 8 * (1 - 0.7 * p.smoothing));
+        onset.update(onsetEnv, dt, 0.01 + p.smoothing * 0.08);
         if (f.fired('flash')) flash = 1;
         flash *= Math.exp(-dt * 5);
 
@@ -137,7 +141,7 @@ export default defineApp({
           uMid: mid.value,
           uTreble: treble.value,
           uLevel: level.value,
-          uOnset: onsetEnv * p.onsetSens,
+          uOnset: onset.value * p.onsetSens,
           uBeat: beat,
         }, fb.write);
         fb.swap();

@@ -7,7 +7,9 @@ const DB_CEIL = -20;
 const AUTO_DECAY_S = 3;
 const AUTO_FLOOR = 0.05;
 const ONSET_HISTORY = 30; // frames (~0.5 s at 60 fps)
-const ONSET_REFRACTORY_MS = 80;
+const ONSET_REFRACTORY_MS = 100;
+/** An onset also needs flux this many times the recent average (rejects sustained-note wobble). */
+const ONSET_MIN_RATIO = 1.6;
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 const dbTo01 = (db: number) => clamp01((db - DB_FLOOR) / (DB_CEIL - DB_FLOOR));
@@ -118,7 +120,7 @@ export class FeatureExtractor implements AudioFeatures {
     mean /= ONSET_HISTORY;
     let variance = 0;
     for (const f of this.fluxHist) variance += (f - mean) ** 2;
-    const threshold = mean + this.onsetK * Math.sqrt(variance / ONSET_HISTORY);
+    const threshold = Math.max(mean + this.onsetK * Math.sqrt(variance / ONSET_HISTORY), mean * ONSET_MIN_RATIO);
     this.flux = flux;
     this.onset = flux > threshold && flux > 1e-3 && now - this.lastOnset > ONSET_REFRACTORY_MS;
     if (this.onset) this.lastOnset = now;
