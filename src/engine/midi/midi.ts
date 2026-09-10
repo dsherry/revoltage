@@ -11,6 +11,8 @@ export interface MidiHooks {
   loadSlot(i: number): void;
   toggleBlackout(): void;
   togglePanic(): void;
+  /** Load the next (1) or previous (-1) filled setlist slot, wrapping around. */
+  stepSlot(dir: 1 | -1): void;
   /** 0..1 */
   setMasterVolume(v: number): void;
   getMasterVolume(): number;

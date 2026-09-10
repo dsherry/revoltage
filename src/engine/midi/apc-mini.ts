@@ -215,6 +215,13 @@ export class ApcDriver {
       this.shift = down;
       return false;
     }
+    // ◀ / ▶ (track buttons 3 and 4) always step through the setlist.
+    if (note === TRACK0 + 2 || note === TRACK0 + 3) {
+      if (down) {
+        try { this.hooks.stepSlot(note === TRACK0 + 3 ? 1 : -1); } catch (e) { log('error', 'midi', 'APC setlist step failed', e); }
+      }
+      return true;
+    }
     const button = isTrack(note) || isScene(note);
     if (down && this.shift && button) {
       this.taken[note] = 1;

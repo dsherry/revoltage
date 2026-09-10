@@ -770,9 +770,11 @@ These always work, whatever app is loaded.
 |---|---|
 | APC **master fader** (CC 56) | Master volume, with **pickup**: the fader must cross the current value before it takes control, so a stray fader position can't cause a jump. Master volume starts at 100% each session and isn't saved. |
 | APC **Shift + Scene 1–8** | Load setlist slot 1–8 (hard cut) |
+| APC **◀ / ▶** (track buttons 3 and 4) | Previous / next setlist slot, skipping empty slots and wrapping around |
 | APC **Shift + Track 1** | Blackout on/off |
 | APC **Shift + Track 8** | **Panic:** fade the app audio bus to 0 and send all-notes-off to every MIDI output. Press again to restore the audio. |
 | Keyboard `1`–`8` | Load setlist slot |
+| Keyboard `←` / `→` | Previous / next setlist slot |
 | Keyboard `B` | Blackout on/off |
 | Keyboard `Shift+P` | Panic |
 | Keyboard `Space` / `T` | Transport play/stop / tap tempo |
@@ -780,6 +782,7 @@ These always work, whatever app is loaded.
 
 - **What the platform consumes:**
   - Scene and track presses **while Shift is held**.
+  - Track buttons 3 and 4 (◀ ▶), always.
   - The master fader.
 
   Everything else goes to the app, including Shift's state (`apc.shift`), all pads and faders 1–8.
@@ -854,7 +857,7 @@ These always work, whatever app is loaded.
 
 **What it does:** a fullscreen WebGL2 feedback shader driven by the OP-1 (or any other audio input).
 
-- **Rendering:** domain-warped fbm noise (lygia) with three modes: `warp`, `kaleido` and `tunnel`. Ping-pong framebuffers feed back the previous frame, with zoom, rotation and decay, to create trails.
+- **Rendering:** domain-warped fbm noise (lygia) with five modes: `warp`, `kaleido`, `tunnel`, `cells` (drifting Voronoi cells with glowing edges) and `ripple` (interference of three wandering wave sources). Ping-pong framebuffers feed back the previous frame, with zoom, rotation and decay, to create trails.
 - **Audio drives the visuals:**
 
   | Audio feature | Visual effect |
@@ -885,9 +888,9 @@ These always work, whatever app is loaded.
 | Control | Action |
 |---|---|
 | Faders 1–8 | `intensity`, `speed`, `zoom`, `warp`, `feedback`, `hueDrift`, `bassSens`, `onsetSens`, each via `ctx.params.set` |
-| Pad rows 0–5 | Pick from a 48-color palette defined in the app. The pad for `colorA` lights green; Shift + press sets `colorB`, lit red. The mk1 pads can't show the actual colors. |
-| Pad row 6 | Modes on pads 0–2 (the active one is yellow); `beatSync` on pad 7 (green when on) |
-| Pad row 7 | Preset slots 1–8. Saved slots are yellow and the active one is green. Shift + press saves into a slot. |
+| Pad rows 3–4 / 5–6 / 7–8 (from the top) | Pick `colorA` / `colorB` / `colorC` from a 16-color palette (15 hues and white). The selected pad lights green / red / yellow. The mk1 pads can't show the actual colors. |
+| Pad row 2 | Modes on pads 1–5 (the active one is yellow); `beatSync` on pad 8 (green when on) |
+| Pad row 1 (top) | Preset slots 1–8. Saved slots are yellow and the active one is green. Shift + press saves into a slot. |
 | Track 1 (no Shift) | `flash` |
 
 **Pulse proves these parts of the platform:**

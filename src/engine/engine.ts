@@ -34,6 +34,7 @@ export class Engine {
     loadSlot: (i) => void this.loadSlot(i),
     toggleBlackout: () => this.toggleBlackout(),
     togglePanic: () => this.togglePanic(),
+    stepSlot: (dir) => void this.stepSlot(dir),
     setMasterVolume: (v) => this.audio.setMasterVolume(v),
     getMasterVolume: () => this.audio.masterVolume,
     setlistState: () => ({ filled: this.setlist.map(Boolean), active: this.activeSlot }),
@@ -124,6 +125,16 @@ export class Engine {
     if (!id || !this.started) return;
     this.activeSlot = i;
     await this.loadApp(id);
+  }
+
+  /** Next (1) or previous (-1) filled setlist slot, wrapping around. */
+  async stepSlot(dir: 1 | -1): Promise<void> {
+    const n = this.setlist.length;
+    let i = this.activeSlot >= 0 ? this.activeSlot : dir > 0 ? -1 : 0;
+    for (let k = 0; k < n; k++) {
+      i = (i + dir + n) % n;
+      if (this.setlist[i]) return this.loadSlot(i);
+    }
   }
 
   async loadApp(id: string): Promise<void> {

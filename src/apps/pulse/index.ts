@@ -2,36 +2,49 @@ import { clamp, defineApp, defineParams, hexToRgb01, hsvToRgb, mapRange, smoothe
 import { fullscreenShader, pingPong } from '@sdk/gl';
 import { PRESENT_FRAG, PULSE_FRAG } from './shaders';
 
-const MODES = ['warp', 'kaleido', 'tunnel'] as const;
+const MODES = ['warp', 'kaleido', 'tunnel', 'cells', 'ripple'] as const;
+const FADERS = 'APC faders 1–8';
 
+// The settings page lists params in this order, so the APC faders come first, in fader order.
 const params = defineParams({
-  source: { type: 'input', kind: 'audioIn', default: 'op1', description: 'Audio input that drives the visuals' },
-  mode: { type: 'select', options: MODES, default: 'warp', description: 'Pattern mode (APC pad row 7, pads 1–3)' },
-  colorA: { type: 'color', default: '#ff2a6d', description: 'Main color (APC palette pads)', group: 'Color' },
-  colorB: { type: 'color', default: '#05d9e8', description: 'Second color (Shift + palette pad)', group: 'Color' },
-  colorC: { type: 'color', default: '#d1f7ff', description: 'Highlight color for rings and onsets', group: 'Color' },
-  hueDrift: { type: 'slider', min: 0, max: 1, default: 0, description: 'Lets colors wander around the hue wheel with time and the brightness of the sound; 0 = exact colors (fader 6)', group: 'Color' },
-  intensity: { type: 'slider', min: 0, max: 2, default: 1, description: 'Overall brightness (fader 1)' },
-  speed: { type: 'slider', min: 0, max: 3, default: 1, description: 'Animation speed (fader 2)' },
-  zoom: { type: 'slider', min: 0.3, max: 3, default: 1, description: 'Pattern scale (fader 3)' },
-  warp: { type: 'slider', min: 0, max: 2, default: 1, description: 'Domain warp amount (fader 4)' },
-  feedback: { type: 'slider', min: 0, max: 0.98, default: 0.85, description: 'Trail length (fader 5)' },
-  bassSens: { type: 'slider', min: 0, max: 3, default: 1, description: 'Bass → zoom pulse (fader 7)', group: 'Reactivity' },
-  onsetSens: { type: 'slider', min: 0, max: 3, default: 1, description: 'Onset → flash strength (fader 8)', group: 'Reactivity' },
-  smoothing: { type: 'slider', min: 0, max: 1, default: 0.35, description: 'Smooths the response to audio: higher is calmer, lower is snappier', group: 'Reactivity' },
-  beatSync: { type: 'toggle', default: false, description: 'Pulse with the clock beat (APC pad row 7, pad 8)', group: 'Reactivity' },
+  intensity: { type: 'slider', min: 0, max: 2, default: 1, description: 'Overall brightness (fader 1)', group: FADERS },
+  speed: { type: 'slider', min: 0, max: 3, default: 1, description: 'Animation speed (fader 2)', group: FADERS },
+  zoom: { type: 'slider', min: 0.3, max: 3, default: 1, description: 'Pattern scale (fader 3)', group: FADERS },
+  warp: { type: 'slider', min: 0, max: 2, default: 1, description: 'Domain warp amount (fader 4)', group: FADERS },
+  feedback: { type: 'slider', min: 0, max: 0.98, default: 0.85, description: 'Trail length (fader 5)', group: FADERS },
+  hueDrift: { type: 'slider', min: 0, max: 1, default: 0, description: 'Lets colors wander around the hue wheel with time and the brightness of the sound; 0 = exact colors (fader 6)', group: FADERS },
+  bassSens: { type: 'slider', min: 0, max: 3, default: 1, description: 'Bass → zoom pulse (fader 7)', group: FADERS },
+  onsetSens: { type: 'slider', min: 0, max: 3, default: 1, description: 'Onset → flash strength (fader 8)', group: FADERS },
+  mode: { type: 'select', options: MODES, default: 'warp', description: 'Pattern (APC pad row 2, pads 1–5)' },
+  colorA: { type: 'color', default: '#ff2a6d', description: 'Main color (APC pad rows 3–4)' },
+  colorB: { type: 'color', default: '#05d9e8', description: 'Second color (APC pad rows 5–6)' },
+  colorC: { type: 'color', default: '#d1f7ff', description: 'Highlight for rings, edges and onsets (APC pad rows 7–8)' },
+  smoothing: { type: 'slider', min: 0, max: 1, default: 0.35, description: 'Smooths the response to audio: higher is calmer, lower is snappier' },
+  beatSync: { type: 'toggle', default: false, description: 'Pulse with the clock beat (APC pad row 2, pad 8)' },
   center: { type: 'xy', default: { x: 0.5, y: 0.5 }, min: 0, max: 1, description: 'Center of the pattern and feedback zoom' },
+  source: { type: 'input', kind: 'audioIn', default: 'op1', description: 'Audio input that drives the visuals' },
   flash: { type: 'trigger', description: 'White flash (APC track button 1)' },
 });
 
 const FADER_PARAMS = ['intensity', 'speed', 'zoom', 'warp', 'feedback', 'hueDrift', 'bassSens', 'onsetSens'] as const;
 
-// 48 palette pads (APC rows 1–6): a hue sweep, with the last pad white.
-const PALETTE = Array.from({ length: 48 }, (_, i) => {
-  if (i === 47) return '#ffffff';
-  const [r, g, b] = hsvToRgb(i / 47, 0.85, 1);
+// 16-color palette (15 hues and white), repeated on each color's pair of pad rows.
+const PALETTE = Array.from({ length: 16 }, (_, i) => {
+  if (i === 15) return '#ffffff';
+  const [r, g, b] = hsvToRgb(i / 15, 0.85, 1);
   return '#' + [r, g, b].map((c) => Math.round(c * 255).toString(16).padStart(2, '0')).join('');
 });
+
+// Pad rows use y = 0 for the bottom row. Each color owns two rows; its LED color marks the selected pad.
+const COLOR_ROWS = [
+  { key: 'colorA', top: 5, led: 'green' }, // rows 3–4 from the top
+  { key: 'colorB', top: 3, led: 'red' }, // rows 5–6
+  { key: 'colorC', top: 1, led: 'yellow' }, // rows 7–8
+] as const;
+const colorPad = (x: number, y: number) => {
+  const row = COLOR_ROWS.find((c) => y === c.top || y === c.top - 1);
+  return row ? { key: row.key, led: row.led, index: (row.top - y) * 8 + x } : null;
+};
 
 const presetName = (x: number) => `pad ${x + 1}`;
 
@@ -59,13 +72,10 @@ export default defineApp({
     // --- APC mini: LEDs mirror the current state.
     const leds = () => {
       if (!apc) return;
-      const selA = PALETTE.indexOf(p.colorA), selB = PALETTE.indexOf(p.colorB);
       const saved = new Set(ctx.presets.list());
       apc.fill((x, y): ApcColor | null => {
-        if (y <= 5) {
-          const i = y * 8 + x;
-          return i === selA ? 'green' : i === selB ? 'red' : null;
-        }
+        const c = colorPad(x, y);
+        if (c) return PALETTE.indexOf(p[c.key]) === c.index ? c.led : null;
         if (y === 6) {
           if (x < MODES.length) return MODES[x] === p.mode ? 'yellow' : null;
           return x === 7 && p.beatSync ? 'green' : null;
@@ -81,8 +91,9 @@ export default defineApp({
       });
       apc.on('pad', (x, y, down) => {
         if (!down) return;
-        if (y <= 5) {
-          ctx.params.set(apc.shift ? 'colorB' : 'colorA', PALETTE[y * 8 + x]);
+        const c = colorPad(x, y);
+        if (c) {
+          ctx.params.set(c.key, PALETTE[c.index]);
         } else if (y === 6) {
           if (x < MODES.length) ctx.params.set('mode', MODES[x]);
           else if (x === 7) ctx.params.set('beatSync', !p.beatSync);
@@ -96,7 +107,7 @@ export default defineApp({
         leds();
       });
       apc.on('track', (i, down) => { if (down && i === 0) ctx.params.fire('flash'); });
-      for (const key of ['colorA', 'colorB', 'mode', 'beatSync'] as const) ctx.params.on(key, leds);
+      for (const key of ['colorA', 'colorB', 'colorC', 'mode', 'beatSync'] as const) ctx.params.on(key, leds);
       leds();
     }
 

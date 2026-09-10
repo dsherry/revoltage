@@ -22,6 +22,7 @@ npm run show     # production build on the same port, for the performance
 | Key | Action |
 |---|---|
 | 1–8 | Load setlist slot |
+| ← / → | Previous / next setlist slot (also the APC ◀ ▶ buttons) |
 | B | Blackout |
 | Shift+P | Panic (mute app audio, all notes off) |
 | Space / T | Clock play-stop / tap tempo |

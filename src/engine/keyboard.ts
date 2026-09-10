@@ -12,6 +12,8 @@ export function handleKey(e: KeyboardEvent, engine: Engine): void {
   else if (k === 'o' || k === 'O') void engine.output.open();
   else if (k === ' ') engine.clock.togglePlay();
   else if (k === 't' || k === 'T') engine.clock.tap();
+  else if (k === 'ArrowRight') void engine.stepSlot(1);
+  else if (k === 'ArrowLeft') void engine.stepSlot(-1);
   else return;
   e.preventDefault();
 }
