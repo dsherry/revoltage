@@ -629,6 +629,7 @@ interface VisionHandle {
   people: Person[]; hands: Hand[]; mask: Mask | null;
   zones: Record<string, ZoneState>;
   activity: number;              // whole-frame motion 0..1 (from the zone differ)
+  setPoseRate(rate: 'full' | 'low'): void;   // 'low': pose only needed now and then, so degrading thins pose instead of hands
 }
 interface Landmark { x: number; y: number; z: number; visibility?: number }   // normalized image coords (0..1)
 interface Person { id: number; landmarks: Landmark[] /* 33, MediaPipe order */; bbox: Rect; center: {x:number,y:number}; speed: number }
@@ -656,7 +657,7 @@ interface Mask { width: number; height: number; bitmap: ImageBitmap; data: Uint8
      - `ImageSegmenter`: `selfie_segmenter.tflite`, with confidence masks.
      - All tasks use `delegate: 'GPU'`, falling back to `'CPU'` if GPU init fails. The fallback is reported in Devices.
    - **Per frame:** only subscribed tasks run, with timestamps that only ever increase. Landmarks are packed into `Float32Array`s and transferred.
-     - **Auto-degrade:** if worker time goes over 30 ms, hands drop to every 2nd frame, then the mask to every 3rd.
+     - **Auto-degrade:** if worker time goes over 30 ms, hands drop to every 2nd frame (or, when every pose subscriber asked for a low pose rate, pose drops to every 3rd), then the mask to every 3rd.
    - **Zones:**
      - Draw the frame onto a 160×90 `OffscreenCanvas` and compute luminance.
      - Keep a running background (`bg += 0.05·(lum − bg)`) and count a pixel as changed when `|lum − bg| > 20`.
@@ -674,7 +675,7 @@ interface Mask { width: number; height: number; bitmap: ImageBitmap; data: Uint8
 
 **Budget:** two cameras each running pose, gestures and mask is borderline. **Spike S2** benchmarks it on this MacBook. The degrade ladder is:
 
-1. Hands on every 2nd frame.
+1. Hands on every 2nd frame (or a low-rate pose on every 3rd).
 2. Mask at 15 fps.
 3. CV runs on only one camera.
 

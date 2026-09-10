@@ -26,7 +26,7 @@ export interface CameraInfo {
   readonly cvLatencyMs: number;
   /** Time the worker spends per frame, smoothed. */
   readonly cvWorkerMs: number;
-  /** 0 = everything every frame, 1 = hands every 2nd frame, 2 = also mask every 3rd. */
+  /** 0 = everything every frame, 1 = hands every 2nd frame (or low-rate pose every 3rd), 2 = also mask every 3rd. */
   readonly degrade: number;
   /** What subscribers want right now, e.g. ['pose-lite', 'hands', 'zones×3']. */
   readonly activeTasks: string[];
@@ -86,7 +86,7 @@ interface Cam {
 interface Sub {
   readonly id: number;
   name: string;
-  readonly pose: { model: 'lite' | 'full'; maxPeople: number } | null;
+  readonly pose: { model: 'lite' | 'full'; maxPeople: number; lowRate: boolean } | null;
   readonly hands: { maxHands: number } | null;
   readonly mask: boolean;
   zones: Zone[];
@@ -130,7 +130,7 @@ function sameNames(a: readonly string[], b: readonly string[]): boolean {
 
 function activeTasks(cfg: CvConfig): string[] {
   const out: string[] = [];
-  if (cfg.pose) out.push(`pose-${cfg.pose.model}`);
+  if (cfg.pose) out.push(`pose-${cfg.pose.model}${cfg.pose.lowRate ? ' (low rate)' : ''}`);
   if (cfg.hands) out.push('hands');
   if (cfg.mask) out.push('mask');
   if (cfg.zones.length) out.push(`zones×${cfg.zones.reduce((n, z) => n + z.zones.length, 0)}`);
@@ -264,6 +264,7 @@ export class VisionEngine implements VisionService {
         ? {
             model: typeof po === 'object' && po.model === 'full' ? 'full' : 'lite',
             maxPeople: clampInt(typeof po === 'object' ? po.maxPeople : undefined, 3, 1, 10),
+            lowRate: false,
           }
         : null,
       hands: ho ? { maxHands: clampInt(typeof ho === 'object' ? ho.maxHands : undefined, 4, 1, 8) } : null,
@@ -319,6 +320,11 @@ export class VisionEngine implements VisionService {
       },
       get zones() { return live()?.zones.get(sub.id)?.states ?? NO_ZONES; },
       get activity() { return live()?.activity ?? 0; },
+      setPoseRate: (rate) => {
+        if (!sub.pose || sub.pose.lowRate === (rate === 'low')) return;
+        sub.pose.lowRate = rate === 'low';
+        this.reconfigure();
+      },
     };
   }
 
@@ -342,6 +348,7 @@ export class VisionEngine implements VisionService {
         cfg.pose = {
           model: cfg.pose?.model === 'full' || s.pose.model === 'full' ? 'full' : 'lite',
           numPoses: Math.max(cfg.pose?.numPoses ?? 0, s.pose.maxPeople),
+          lowRate: (cfg.pose?.lowRate ?? true) && s.pose.lowRate,
         };
       }
       if (s.hands) cfg.hands = { numHands: Math.max(cfg.hands?.numHands ?? 0, s.hands.maxHands) };

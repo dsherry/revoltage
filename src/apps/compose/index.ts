@@ -40,8 +40,10 @@ const params = defineParams({
   maxNotes: { type: 'slider', min: 1, max: 24, step: 1, default: 7, description: 'Notes in a string from the biggest swings (if not above the minimum, the minimum + 1)' },
   slowest: { type: 'slider', min: 0.5, max: 8, step: 0.1, default: 2, group: SWING, description: 'Notes per second for the slowest swings' },
   fastest: { type: 'slider', min: 4, max: 30, step: 0.5, default: 16, group: SWING, description: 'Notes per second for the fastest swings' },
-  minSwing: { type: 'slider', min: 0.5, max: 8, step: 0.1, default: 2, group: SWING, description: 'Speed (shoulder widths per second; in hands mode, two hand lengths count as one) a movement needs to count as a swing' },
-  fastSwing: { type: 'slider', min: 3, max: 25, step: 0.5, default: 10, group: SWING, description: 'Speed that plays at the fastest tempo' },
+  minSwing: { type: 'slider', min: 0.5, max: 8, step: 0.1, default: 2, group: SWING, description: 'Arms mode: wrist speed (shoulder widths per second) a movement needs to count as a swing' },
+  fastSwing: { type: 'slider', min: 3, max: 25, step: 0.5, default: 10, group: SWING, description: 'Arms mode: wrist speed that plays at the fastest tempo' },
+  handMinSwing: { type: 'slider', min: 0.5, max: 8, step: 0.1, default: 1.5, group: SWING, description: 'Hands mode: hand speed (two hand lengths per second) a movement needs to count as a swing' },
+  handFastSwing: { type: 'slider', min: 2, max: 25, step: 0.5, default: 6, group: SWING, description: 'Hands mode: hand speed that plays at the fastest tempo' },
   smooth: { type: 'slider', min: 0, max: 1, step: 0.01, default: 0.5, group: SWING, description: 'Smooths tracked hand and wrist positions: 0 = raw, 1 = heavy (steadier but slower to react)' },
   camera: { type: 'input', kind: 'camera', default: 'webcam', group: DEVICES, description: 'Camera watching the performers' },
   maxPeople: { type: 'slider', min: 1, max: 4, step: 1, default: 2, group: DEVICES, description: 'People to track (applies when the app reloads)' },
@@ -146,6 +148,13 @@ export default defineApp({
     const midiOut = ctx.midi.output({ param: 'midiOut' });
     const audioIn = ctx.audio.input({ param: 'audioIn' });
     const gestures = new GestureTracker();
+    // Hands mode needs the skeleton only for the X, so let the hands have the CV time.
+    const poseRate = (): void => cv.setPoseRate(p.tracking === 'hands' ? 'low' : 'full');
+    poseRate();
+    ctx.own(p.on('tracking', poseRate));
+    /** Swing speed range (body scales per second) for the current mode. */
+    const swingRange = (): [number, number] =>
+      p.tracking === 'hands' ? [p.handMinSwing, p.handFastSwing] : [p.minSwing, p.fastSwing];
 
     const strings: Str[] = [];
     const voices: { synth: Tone.Synth; doneAt: number }[] = [];
@@ -171,7 +180,8 @@ export default defineApp({
     }
 
     function play(s: Swing): void {
-      const u = clamp((s.speed - p.minSwing) / Math.max(0.1, p.fastSwing - p.minSwing));
+      const [minSwing, fastSwing] = swingRange();
+      const u = clamp((s.speed - minSwing) / Math.max(0.1, fastSwing - minSwing));
       const rate = p.slowest * (Math.max(p.fastest, p.slowest) / p.slowest) ** u;
       const step = 1 / rate;
       const lo = p.minNotes, hi = p.maxNotes > p.minNotes ? p.maxNotes : p.minNotes + 1;
@@ -319,7 +329,7 @@ export default defineApp({
         if (f.fired('test')) {
           play({
             dir: Math.random() < 0.5 ? 'up' : 'down',
-            speed: mapRange(Math.random(), 0, 1, p.minSwing, p.fastSwing),
+            speed: mapRange(Math.random(), 0, 1, ...swingRange()),
             size: mapRange(Math.random(), 0, 1, MIN_SIZE, BIG_SIZE),
             open: true,
             y: Math.random(),
@@ -327,7 +337,7 @@ export default defineApp({
         }
         if (cv.connected && cv.updatedAt !== lastCv) {
           lastCv = cv.updatedAt;
-          const r = gestures.update(cv.people, cv.hands, cv.updatedAt, { mode: p.tracking, minSpeed: p.minSwing, smooth: p.smooth });
+          const r = gestures.update(cv.people, cv.hands, cv.updatedAt, { mode: p.tracking, minSpeed: swingRange()[0], smooth: p.smooth });
           if (r.stop) stopAll('X pose');
           for (const s of r.swings) if (s.open) play(s);
         }

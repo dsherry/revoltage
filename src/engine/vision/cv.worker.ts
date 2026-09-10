@@ -16,7 +16,8 @@ export type Delegate = 'GPU' | 'CPU';
 
 /** What the main thread wants run on this camera (the union of all subscribers). */
 export interface CvConfig {
-  pose: { model: 'lite' | 'full'; numPoses: number } | null;
+  /** lowRate: every subscriber needs pose only now and then, so degrading thins pose instead of hands. */
+  pose: { model: 'lite' | 'full'; numPoses: number; lowRate: boolean } | null;
   hands: { numHands: number } | null;
   mask: boolean;
   /** Zones are already in raw (unmirrored) frame coordinates. */
@@ -381,12 +382,14 @@ function onFrame(seq: number, bitmap: ImageBitmap): void {
     frameNo++;
     const c = config;
 
-    if (c.pose) {
+    // Degrade level 1 thins hands, or pose instead when it's only needed now and then.
+    const thinPose = degrade >= 1 && !!c.pose?.lowRate;
+    if (c.pose && (!thinPose || frameNo % 3 === 0)) {
       const e = c.pose.model === 'full' && poseFull.state === 'ready' ? poseFull : poseLite;
       if (c.pose.model === 'full' && e === poseLite && poseLite.state === 'idle') ensure(poseLite, c.pose.numPoses);
       run(e, (r) => { out.pose = packPose(r.detectForVideo(bitmap, ts)); });
     }
-    if (c.hands && (degrade < 1 || frameNo % 2 === 0)) {
+    if (c.hands && (degrade < 1 || thinPose || frameNo % 2 === 0)) {
       run(hands, (r) => { out.hands = packHands(r.recognizeForVideo(bitmap, ts)); });
     }
     if (c.mask && (degrade < 2 || frameNo % 3 === 0)) {
@@ -423,11 +426,12 @@ function onFrame(seq: number, bitmap: ImageBitmap): void {
     } else if (
       ema > SLOW_MS && t0 - degradeAt > 1000 &&
       // Only step when the step sheds work that's actually running.
-      ((degrade === 0 && (config.hands || config.mask)) || (degrade === 1 && config.mask))
+      ((degrade === 0 && (config.hands || config.mask || config.pose?.lowRate)) || (degrade === 1 && config.mask))
     ) {
       degrade++;
       degradeAt = t0;
-      log('warn', `CV takes ${ema.toFixed(0)} ms/frame: ${degrade === 1 ? 'hands now every 2nd frame' : 'mask now every 3rd frame'}`);
+      const shed = degrade === 1 ? (config.pose?.lowRate ? 'pose now every 3rd frame' : 'hands now every 2nd frame') : 'mask now every 3rd frame';
+      log('warn', `CV takes ${ema.toFixed(0)} ms/frame: ${shed}`);
     } else if (ema < SLOW_MS / 2 && degrade > 0 && t0 - degradeAt > 5000) {
       degrade--;
       degradeAt = t0;

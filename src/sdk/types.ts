@@ -227,6 +227,11 @@ export interface VisionHandle {
   readonly zones: Readonly<Record<string, ZoneState>>;
   /** Whole-frame motion 0..1. */
   readonly activity: number;
+  /**
+   * 'low': this subscriber needs pose only now and then (e.g. for a stop pose), so when CV is slow
+   * pose is thinned rather than hands. Pose runs low only while every pose subscriber says so. Default 'full'.
+   */
+  setPoseRate(rate: 'full' | 'low'): void;
 }
 export interface VisionAPI {
   cameras(): string[];

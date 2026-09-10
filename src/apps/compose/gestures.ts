@@ -8,8 +8,8 @@ const L_SHOULDER = 11, R_SHOULDER = 12, L_ELBOW = 13, R_ELBOW = 14;
 const WRISTS = [15, 16] as const;
 /** [pip, tip] of the index, middle, ring and pinky fingers. */
 const FINGERS = [[6, 8], [10, 12], [14, 16], [18, 20]] as const;
-/** Palm centre: the wrist and the four knuckles. */
-const PALM = [0, 5, 9, 13, 17] as const;
+/** Hands mode follows the wrist and fingertips: a quick hand wave is mostly the fingers sweeping. */
+const HAND_POINTS = [0, 4, 8, 12, 16, 20] as const;
 
 /** A hand's new open/closed state must hold this long before it's believed. */
 const HAND_SETTLE_MS = 80;
@@ -205,7 +205,7 @@ class TrackedHand {
   scale = 0;
   /** `seen` of the last hand result used. */
   at = -1;
-  /** Palm centre (normalized image coords). */
+  /** Centre of the wrist and fingertips (normalized image coords). */
   x = 0;
   y = 0;
 }
@@ -332,7 +332,7 @@ export class GestureTracker {
     for (const b of this.bodies.values()) for (const a of b.arms) a.updateHand(matched.get(a) ?? null, now);
   }
 
-  /** Hands mode: every tracked hand swings on its own, measured at the palm centre. */
+  /** Hands mode: every tracked hand swings on its own, measured at its wrist and fingertips. */
   private updateHands(hands: readonly Hand[], now: number, minSpeed: number, cutoff: number, out: Swing[]): void {
     const present = new Set<number>();
     for (const h of hands) {
@@ -344,12 +344,12 @@ export class GestureTracker {
       th.limb.updateHand(h, now);
       const lm = h.landmarks;
       let x = 0, y = 0;
-      for (const i of PALM) {
+      for (const i of HAND_POINTS) {
         x += lm[i].x;
         y += lm[i].y;
       }
-      th.x = x / PALM.length;
-      th.y = y / PALM.length;
+      th.x = x / HAND_POINTS.length;
+      th.y = y / HAND_POINTS.length;
       const raw = Math.max(0.01, dist(lm[0], lm[9]) * HAND_SCALE);
       th.scale = th.scale ? th.scale + (raw - th.scale) * 0.1 : raw;
       const s = th.limb.updateMotion(th.x * ASPECT, th.y, th.y, h.seen / 1000, th.scale, minSpeed, cutoff);

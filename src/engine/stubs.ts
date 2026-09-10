@@ -55,6 +55,7 @@ export class StubMidi implements MidiService {
 
 const emptyVision: VisionHandle = {
   connected: false, fps: 0, latencyMs: 0, updatedAt: 0, people: [], hands: [], mask: null, zones: {}, activity: 0,
+  setPoseRate: () => {},
 };
 
 export class StubVision implements VisionService {
