@@ -22,6 +22,7 @@ export const view = $state({
   size: { w: 0, h: 0 },
   stats: { fps: 0, frameP95: 0, appP95: 0, mirrorP95: 0 },
   clock: { bpm: 120, playing: false, source: 'internal' as 'internal' | 'midi' },
+  master: 0.8,
   logs: [...recentLogs()] as LogEntry[],
 });
 
@@ -56,6 +57,7 @@ engine.events.on(() => untrack(sync));
 setInterval(() => {
   view.stats = engine.stats.summary();
   view.outputOpen = engine.output.isOpen;
+  view.master = engine.audio.masterVolume;
   syncClock();
 }, 250);
 onLog((e) => untrack(() => {

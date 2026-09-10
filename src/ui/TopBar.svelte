@@ -32,6 +32,9 @@
   <button class:danger={view.panicked} onclick={() => engine.togglePanic()}>
     {view.panicked ? 'Release panic' : 'Panic'} <kbd>⇧P</kbd>
   </button>
+  <span class="vol" class:low={view.started && view.master < 0.05} title="Master volume (APC master fader or Mixer)">
+    Vol {Math.round(view.master * 100)}%
+  </span>
   <label>
     Render
     <select value={view.renderScale} onchange={(e) => engine.setRenderScale(Number(e.currentTarget.value))}>
@@ -52,5 +55,7 @@
   .danger { background: #8b1d1d; border-color: #c33; color: #fff; }
   .clock { display: flex; align-items: center; gap: 4px; padding: 0 8px; border-left: 1px solid #333; border-right: 1px solid #333; }
   .clock input { width: 64px; }
+  .vol { font: 12px ui-monospace, monospace; padding: 2px 6px; border-radius: 3px; }
+  .vol.low { background: #b00; color: #fff; font-weight: 700; }
   .stats { margin-left: auto; color: #8a8; font: 12px ui-monospace, monospace; }
 </style>
