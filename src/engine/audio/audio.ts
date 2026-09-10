@@ -42,7 +42,8 @@ export class AudioEngine implements AudioService {
   readonly strips = new Map<string, Strip>();
   inputs: MediaDeviceInfo[] = [];
   outputs: MediaDeviceInfo[] = [];
-  masterVolume = load<number>('audio:master', 0.8);
+  /** Always starts at full and isn't saved, so a pulled-down fader can't silence the next session. */
+  masterVolume = 1;
   sinkLabel = load<string>('audio:sink', '');
   masterFeatures: FeatureExtractor | null = null;
   limiter: DynamicsCompressorNode | null = null;
@@ -53,7 +54,6 @@ export class AudioEngine implements AudioService {
   private appBus!: GainNode;
   private appFade!: GainNode;
   private panicGain!: GainNode;
-  private saveTimer = 0;
 
   async start(): Promise<void> {
     const ctx = new AudioContext({ latencyHint: 'interactive' });
@@ -145,12 +145,6 @@ export class AudioEngine implements AudioService {
   setMasterVolume(v: number): void {
     this.masterVolume = Math.min(1, Math.max(0, v));
     if (this.ctx) this.masterGain.gain.setTargetAtTime(this.masterVolume ** 2, this.ctx.currentTime, 0.02);
-    if (!this.saveTimer) {
-      this.saveTimer = window.setTimeout(() => {
-        this.saveTimer = 0;
-        save('audio:master', this.masterVolume);
-      }, 300);
-    }
   }
 
   async setOutput(deviceId: string): Promise<void> {
