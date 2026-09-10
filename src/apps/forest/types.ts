@@ -45,6 +45,8 @@ export interface ForestInputs {
   light: number;
   /** 0..1 fireflies / particles amount. */
   life: number;
+  /** Lightning Chase: each chase is followed by a turtle and a sloth parading with flags. */
+  parade: boolean;
 }
 
 export interface SceneContext {

@@ -35,6 +35,7 @@ const params = defineParams({
   colorB: { type: 'color', default: '#ffc94d', description: 'Light: sunlit leaves, cell walls, fireflies (APC pad rows 5–6)' },
   colorC: { type: 'color', default: '#7fd4ff', description: 'Electric: pulses, electron sparks, lightning (APC pad rows 7–8)' },
   strike: { type: 'trigger', description: 'Force an electrical strike (APC track button 1)' },
+  parade: { type: 'toggle', default: false, description: 'Lightning Chase: each chase is followed by a turtle and a sloth parading with colorful flags' },
   useCamera: {
     type: 'select', options: ['off', 'hand', 'body'], default: 'off',
     description: 'Camera input, applies when the app reloads: hand = your hand moves the sun and fireflies; body = also your silhouette (heavier)',
@@ -99,7 +100,7 @@ export default defineApp({
       t: 0, dt: 0, realDt: 0, level: 0, bass: 0, mid: 0, treble: 0,
       onset: false, onsetStrength: 0, pitch: null, beat: 0, hand: null, mask: null, maskMirrored: false,
       colorA: new THREE.Color(), colorB: new THREE.Color(), colorC: new THREE.Color(),
-      intensity: 1, density: 0.6, charge: 0.6, light: 0.6, life: 0.5,
+      intensity: 1, density: 0.6, charge: 0.6, light: 0.6, life: 0.5, parade: false,
     };
     const level = smoother(0.2), bass = smoother(0.2), mid = smoother(0.2), treble = smoother(0.2);
     const handX = smoother(0.15, 0.5), handY = smoother(0.15, 0.5);
@@ -191,6 +192,7 @@ export default defineApp({
         inputs.charge = p.charge;
         inputs.light = p.light;
         inputs.life = p.life;
+        inputs.parade = p.parade;
 
         let scene: { scene: THREE.Scene; camera: THREE.Camera } = blank;
         try {
