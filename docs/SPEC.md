@@ -116,6 +116,8 @@ Versions were checked against npm on 2026-09-10. Pin exact versions in `package.
 - **tfjs pose models:** no release in about 2 years.
 - **SharedArrayBuffer with COOP/COEP headers:** not needed in v1.
 
+**Install policy:** every library is declared in `package.json` (or vendored under `firmware/libraries/` for Arduino) and lives inside the repo. Nothing system-level is installed without asking first. Flashing uses the `arduino-cli` bundled inside the Arduino IDE, which is already on the machine.
+
 ---
 
 ## 5. Architecture
@@ -908,7 +910,7 @@ Once M1 fixes the SDK contracts, M3, M4, M7 and M8 are independent behind their 
 
 | # | Milestone | Done when |
 |---|---|---|
-| M0 | Scaffold (Vite, Svelte, TypeScript, Vitest, layout in §6, fetch models) and **spikes S1–S4** | Spike results written into §15 |
+| M0 | Scaffold (Vite, Svelte, TypeScript, Vitest, layout in §6, fetch models) | `npm run dev` serves the control window |
 | M1 | Engine core: loop, app host, `2d` and `webgl2` surfaces, output window with mirror and fullscreen, setlist hard cut, keyboard globals, error isolation, Stats | A test app switches cleanly on both windows at 60 fps |
 | M2 | Params: `defineParams` types, Tweakpane settings page (all primitives plus xy, vec3, trigger, select, color), input picker, autosave, presets, export/import | Values persist across reloads; presets recall |
 | M3 | Audio: Start gesture, device registry with short names, stable per-device buses, mixer strips, features and onset, limiter, master volume, output device, Tone.js binding, app bus fades | OP-1 metered and audible through the laptop output; processing flags verified off |
@@ -920,7 +922,9 @@ Once M1 fixes the SDK contracts, M3, M4, M7 and M8 are independent behind their 
 | M9 | `three` and `p5` adapters with example apps; recorder (record/loop); Tone.js sequencing helper | Example apps for each surface |
 | M10 | Show hardening: `npm run show`, run the checklist, 30-minute soak test | Checklist passes |
 
-### Spikes (first hour)
+### Hardware checks
+
+These were planned as separate test pages in the first hour. Instead, each one is measured in the real code as its milestone lands: S1 in M1 (the top bar shows mirror time), S3 in M3, S4 in M4 and S2 in M8.
 
 - **S1 — Mirroring:** measure `drawImage` from a stage canvas to the output window at 1080p, with the loop driven by the output window's rAF. Pass: ≤ 1 ms per frame and steady 60 fps.
 - **S2 — CV throughput:** two cameras, each running pose lite, gestures and segmenter in one worker per camera with the GPU delegate. Record fps and latency.
@@ -929,9 +933,9 @@ Once M1 fixes the SDK contracts, M3, M4, M7 and M8 are independent behind their 
 
 ---
 
-## 15. Spike results
+## 15. Hardware check results
 
-*(fill in during M0)*
+*(filled in as each milestone lands)*
 
 | Spike | Result | Decision |
 |---|---|---|

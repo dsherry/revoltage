@@ -1,0 +1,52 @@
+{
+  "name": "revoltage",
+  "version": "0.1.0",
+  "description": "Platform for audiovisual experiments at Re:Voltage Sept 2026",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "show": "vite build && vite preview",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "models": "bash scripts/fetch-models.sh"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dsherry/revoltage.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/dsherry/revoltage/issues"
+  },
+  "homepage": "https://github.com/dsherry/revoltage#readme",
+  "private": true,
+  "dependencies": {
+    "@mediapipe/tasks-vision": "^1.0.1",
+    "@tweakpane/core": "^2.0.5",
+    "@tweakpane/plugin-essentials": "^0.2.1",
+    "1eurofilter": "^1.3.0",
+    "lygia": "^1.4.1",
+    "p5": "^2.3.3",
+    "pitchy": "^4.1.0",
+    "three": "^0.186.0",
+    "tone": "^15.1.22",
+    "tweakpane": "^4.0.5",
+    "twgl.js": "^7.0.0",
+    "webmidi": "^3.1.16"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.3.0",
+    "@types/audioworklet": "^0.0.100",
+    "@types/three": "^0.185.4",
+    "svelte": "^5.57.0",
+    "svelte-check": "^4.7.6",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.0",
+    "vite-plugin-glsl": "^1.6.1"
+  }
+}

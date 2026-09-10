@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Revoltage · Output</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+      canvas { display: block; width: 100vw; height: 100vh; }
+      :fullscreen, :fullscreen canvas { cursor: none; }
+      #hint {
+        position: fixed; inset: 0; display: grid; place-items: center;
+        color: #888; font: 16px system-ui, sans-serif; pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="out"></canvas>
+    <div id="hint">Click or press F for fullscreen</div>
+    <script type="module" src="/src/output.ts"></script>
+  </body>
+</html>
