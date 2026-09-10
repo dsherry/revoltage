@@ -9,6 +9,7 @@ export interface Scale { readonly steps: readonly number[]; readonly octaves: nu
 
 export const SCALES: Record<string, Scale> = {
   'Major pentatonic (1 oct)': { steps: [0, 2, 4, 7, 9], octaves: 1 },
+  'Minor pentatonic (1 oct)': { steps: [0, 3, 5, 7, 10], octaves: 1 },
   'Major (1 oct)': { steps: [0, 2, 4, 5, 7, 9, 11], octaves: 1 },
   'Natural minor (1 oct)': { steps: [0, 2, 3, 5, 7, 8, 10], octaves: 1 },
   'Octatonic, whole-half (1 oct)': { steps: [0, 2, 3, 5, 6, 8, 9, 11], octaves: 1 },
