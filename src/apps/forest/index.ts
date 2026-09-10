@@ -8,13 +8,15 @@ import type { ForestInputs, ForestScene, SceneFactory } from './types';
 import { createCanopy } from './canopy';
 import { createChloroplast } from './chloroplast';
 import { createLightning } from './lightning';
+import { createLightningChase } from './lightning-chase';
 
-const SCENES = ['canopy', 'chloroplast', 'lightning'] as const;
+const SCENES = ['canopy', 'chloroplast', 'lightning', 'lightning-chase'] as const;
 type SceneName = (typeof SCENES)[number];
 const FACTORIES: Record<SceneName, SceneFactory> = {
   canopy: createCanopy,
   chloroplast: createChloroplast,
   lightning: createLightning,
+  'lightning-chase': createLightningChase,
 };
 const FADERS = 'APC faders 1–8';
 
@@ -28,7 +30,7 @@ const params = defineParams({
   charge: { type: 'slider', min: 0, max: 1, default: 0.6, description: 'Electricity: how many pulses, sparks or bolts each note makes (fader 6)', group: FADERS },
   light: { type: 'slider', min: 0, max: 1, default: 0.6, description: 'Sun, light shafts and sky brightness (fader 7)', group: FADERS },
   life: { type: 'slider', min: 0, max: 1, default: 0.5, description: 'Fireflies and particles (fader 8)', group: FADERS },
-  scene: { type: 'select', options: SCENES, default: 'canopy', description: 'Canopy Current, Chloroplast Flow or Lightning Forest (APC pad row 2, pads 1–3)' },
+  scene: { type: 'select', options: SCENES, default: 'canopy', description: 'Canopy Current, Chloroplast Flow, Lightning Forest, or Lightning Chase: wolves chased by huge penguins on each strike (APC pad row 2, pads 1–4)' },
   colorA: { type: 'color', default: '#3ddc84', description: 'Life: leaves, chloroplasts, forest tint (APC pad rows 3–4)' },
   colorB: { type: 'color', default: '#ffc94d', description: 'Light: sunlit leaves, cell walls, fireflies (APC pad rows 5–6)' },
   colorC: { type: 'color', default: '#7fd4ff', description: 'Electric: pulses, electron sparks, lightning (APC pad rows 7–8)' },

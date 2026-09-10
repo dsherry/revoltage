@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { ForestInputs, SceneFactory } from './types';
+import type { ForestInputs, ForestScene, SceneContext, SceneFactory } from './types';
 import { BoltGeometry, buildPineLayer, GROUND_VERTS, PINE_SPAN, VERTS_PER_TREE, type PineLayerSpec } from './lightning-geometry';
 import {
   BOLT_FRAG, BOLT_VERT, FIREFLY_FRAG, FIREFLY_VERT, MASK_FRAG, PINE_FRAG, PINE_VERT, SCREEN_VERT, SKY_FRAG,
@@ -13,7 +13,7 @@ interface LayerDef extends PineLayerSpec {
 }
 
 // Back to front. Each layer's ground sits lower and its trees are taller, so nearer layers overlap farther ones.
-const LAYERS: LayerDef[] = [
+export const LAYERS: LayerDef[] = [
   { ground: -0.2, minH: 0.22, maxH: 0.42, maxTrees: 110, seed: 11, speed: 0.006, fogMix: 0.78, rim: 0.15, sway: 0.002 },
   { ground: -0.42, minH: 0.32, maxH: 0.58, maxTrees: 72, seed: 23, speed: 0.013, fogMix: 0.52, rim: 0.35, sway: 0.003 },
   { ground: -0.66, minH: 0.5, maxH: 0.85, maxTrees: 44, seed: 37, speed: 0.026, fogMix: 0.27, rim: 0.7, sway: 0.005 },
@@ -26,7 +26,7 @@ const BOLT_POOL = 6;
 const BOLT_END_Y = -0.5;
 
 // Draw order (everything is transparent + depthless so renderOrder alone decides).
-const ORDER = { sky: 0, pine0: 1, bolts: 2, pine1: 3, firefliesBack: 4, pine2: 5, mask: 6, firefliesFront: 7, pine3: 8 };
+export const ORDER = { sky: 0, pine0: 1, bolts: 2, pine1: 3, firefliesBack: 4, pine2: 5, mask: 6, firefliesFront: 7, pine3: 8 };
 const PINE_ORDER = [ORDER.pine0, ORDER.pine1, ORDER.pine2, ORDER.pine3];
 
 interface Bolt {
@@ -49,7 +49,22 @@ const baseMaterial = (blending: THREE.Blending): THREE.ShaderMaterialParameters 
   side: THREE.DoubleSide,
 });
 
-export const createLightning: SceneFactory = (ctx) => {
+export interface LightningHooks {
+  /** Called once per lightning strike with its x position (scene units) and strength 0..1. */
+  onStrike?(x: number, strength: number): void;
+}
+
+/** The Lightning Forest scene plus what variants built on it need. */
+export interface LightningScene extends ForestScene {
+  /** Current sky-flash brightness, 0 to about 1. */
+  flash(): number;
+  /** Half-width of the view in scene units. */
+  aspect(): number;
+}
+
+export const createLightning: SceneFactory = (ctx) => buildLightning(ctx);
+
+export function buildLightning(ctx: SceneContext, hooks: LightningHooks = {}): LightningScene {
   const scene = new THREE.Scene();
   let aspect = ctx.width / Math.max(1, ctx.height);
   const camera = new THREE.OrthographicCamera(-aspect, aspect, 1, -1, 0.1, 10);
@@ -240,6 +255,7 @@ export const createLightning: SceneFactory = (ctx) => {
     if (i.onset && i.onsetStrength >= (1 - i.charge) * 0.7) {
       const n = Math.min(3, 1 + Math.floor(i.charge * i.charge * i.onsetStrength * 2.5));
       for (let k = 0; k < n; k++) spawnBolt(i.onsetStrength, i.charge);
+      hooks.onStrike?.(flashX, i.onsetStrength);
     }
     let flashTarget = 0;
     for (const b of bolts) {
@@ -301,6 +317,8 @@ export const createLightning: SceneFactory = (ctx) => {
     scene,
     camera,
     update,
+    flash: () => flash,
+    aspect: () => aspect,
     resize(w, h) {
       aspect = w / Math.max(1, h);
       camera.left = -aspect;
@@ -316,4 +334,4 @@ export const createLightning: SceneFactory = (ctx) => {
       scene.clear();
     },
   };
-};
+}
