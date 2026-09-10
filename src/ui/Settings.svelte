@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { engine } from '../engine/engine';
   import { view } from './view.svelte';
   import { buildPane } from '../engine/params/pane';
@@ -10,14 +11,20 @@
   let newName = $state('');
 
   // Rebuild the settings page on every mount (including hot reloads of the same app).
+  // Only mountCount and the container are dependencies; the rest is untracked so
+  // writing `presets` here can't re-trigger this effect.
   $effect(() => {
     void view.mountCount;
-    const m = engine.host.current;
-    if (!m || !paneEl) return;
-    const pane = buildPane(paneEl, m.def.params, m.store, (k) => engine.deviceNames(k));
-    presets = m.store.presets.list();
-    chosen = presets[0] ?? '';
-    return () => pane.dispose();
+    const el = paneEl;
+    return untrack(() => {
+      const m = engine.host.current;
+      if (!m || !el) return;
+      const pane = buildPane(el, m.def.params, m.store, (k) => engine.deviceNames(k));
+      const list = m.store.presets.list();
+      presets = list;
+      chosen = list[0] ?? '';
+      return () => pane.dispose();
+    });
   });
 
   const store = () => engine.host.current?.store;

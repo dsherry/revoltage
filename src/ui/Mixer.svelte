@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { engine } from '../engine/engine';
   import { shortNameFor } from '../engine/devices';
   import Meter from './Meter.svelte';
@@ -6,9 +7,10 @@
   const audio = engine.audio;
 
   // Strips and devices are plain engine objects; re-snapshot them on engine events and twice a second.
+  // Untracked: engine events can fire while some other effect is running.
   let tick = $state(0);
   $effect(() => {
-    const off = engine.events.on(() => tick++);
+    const off = engine.events.on(() => untrack(() => tick++));
     const iv = setInterval(() => tick++, 500);
     return () => { off(); clearInterval(iv); };
   });

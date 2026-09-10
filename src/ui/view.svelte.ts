@@ -1,3 +1,4 @@
+import { untrack } from 'svelte';
 import { engine } from '../engine/engine';
 import { onLog, recentLogs, type LogEntry } from '../engine/log';
 import { registry } from '../engine/registry';
@@ -50,14 +51,15 @@ function syncClock(): void {
   view.clock = { bpm: c.bpm, playing: c.playing, source: engine.clock.source };
 }
 
-engine.events.on(sync);
+// Engine events and logs can fire while a component effect is running; never let them become dependencies.
+engine.events.on(() => untrack(sync));
 setInterval(() => {
   view.stats = engine.stats.summary();
   view.outputOpen = engine.output.isOpen;
   syncClock();
 }, 250);
-onLog((e) => {
+onLog((e) => untrack(() => {
   view.logs.push(e);
   if (view.logs.length > 200) view.logs.splice(0, view.logs.length - 200);
-});
+}));
 sync();
