@@ -862,6 +862,7 @@ These always work, whatever app is loaded.
 
   | Audio feature | Visual effect |
   |---|---|
+  | Level | Motion speed and brightness. `velocityDrift` blends motion speed from auto-gained level (sound vs silence) to raw loudness. |
   | Bass | Zoom pulse and warp amount |
   | Mid | Rotation speed |
   | Treble | Grain and sparkle |
@@ -878,7 +879,7 @@ These always work, whatever app is loaded.
 | `source` | input, audioIn, default `op1` |
 | `mode` | select |
 | `colorA`, `colorB`, `colorC` | color |
-| `intensity`, `speed`, `zoom`, `warp`, `feedback` (0–0.98), `hueDrift`, `bassSens`, `onsetSens` | slider |
+| `intensity`, `speed`, `zoom`, `warp`, `feedback` (0–0.98), `hueDrift`, `bassSens`, `onsetSens`, `smoothing`, `velocityDrift` | slider |
 | `beatSync` | toggle |
 | `center` | xy |
 | `flash` | trigger |

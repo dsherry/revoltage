@@ -1,4 +1,6 @@
-import { clamp, defineApp, defineParams, hexToRgb01, hsvToRgb, mapRange, smoother, type ApcColor } from '@sdk';
+import {
+  APC_PALETTE as PALETTE, apcColorPad, clamp, defineApp, defineParams, hexToRgb01, mapRange, smoother, type ApcColor,
+} from '@sdk';
 import { fullscreenShader, pingPong } from '@sdk/gl';
 import { PRESENT_FRAG, PULSE_FRAG } from './shaders';
 
@@ -20,6 +22,7 @@ const params = defineParams({
   colorB: { type: 'color', default: '#05d9e8', description: 'Second color (APC pad rows 5–6)' },
   colorC: { type: 'color', default: '#d1f7ff', description: 'Highlight for rings, edges and onsets (APC pad rows 7–8)' },
   smoothing: { type: 'slider', min: 0, max: 1, default: 0.35, description: 'Smooths the response to audio: higher is calmer, lower is snappier' },
+  velocityDrift: { type: 'slider', min: 0, max: 1, default: 0, description: 'What sets the motion speed: 0 = whether there is sound (auto-gained), 1 = how loud the sound is right now, freezing in silence' },
   beatSync: { type: 'toggle', default: false, description: 'Pulse with the clock beat (APC pad row 2, pad 8)' },
   center: { type: 'xy', default: { x: 0.5, y: 0.5 }, min: 0, max: 1, description: 'Center of the pattern and feedback zoom' },
   source: { type: 'input', kind: 'audioIn', default: 'op1', description: 'Audio input that drives the visuals' },
@@ -28,22 +31,11 @@ const params = defineParams({
 
 const FADER_PARAMS = ['intensity', 'speed', 'zoom', 'warp', 'feedback', 'hueDrift', 'bassSens', 'onsetSens'] as const;
 
-// 16-color palette (15 hues and white), repeated on each color's pair of pad rows.
-const PALETTE = Array.from({ length: 16 }, (_, i) => {
-  if (i === 15) return '#ffffff';
-  const [r, g, b] = hsvToRgb(i / 15, 0.85, 1);
-  return '#' + [r, g, b].map((c) => Math.round(c * 255).toString(16).padStart(2, '0')).join('');
-});
-
-// Pad rows use y = 0 for the bottom row. Each color owns two rows; its LED color marks the selected pad.
-const COLOR_ROWS = [
-  { key: 'colorA', top: 5, led: 'green' }, // rows 3–4 from the top
-  { key: 'colorB', top: 3, led: 'red' }, // rows 5–6
-  { key: 'colorC', top: 1, led: 'yellow' }, // rows 7–8
-] as const;
+// APC pad rows 3–4 / 5–6 / 7–8 (from the top) pick colors A / B / C.
+const COLOR_KEYS = ['colorA', 'colorB', 'colorC'] as const;
 const colorPad = (x: number, y: number) => {
-  const row = COLOR_ROWS.find((c) => y === c.top || y === c.top - 1);
-  return row ? { key: row.key, led: row.led, index: (row.top - y) * 8 + x } : null;
+  const c = apcColorPad(x, y);
+  return c ? { key: COLOR_KEYS[c.slot], led: c.led, index: c.index } : null;
 };
 
 const presetName = (x: number) => `pad ${x + 1}`;
@@ -66,6 +58,7 @@ export default defineApp({
     const p = ctx.params;
 
     const bass = smoother(0.1), mid = smoother(0.1), treble = smoother(0.1), level = smoother(0.1), onset = smoother(0.02);
+    const loudness = smoother(0.1);
     let phase = 0, hueT = 0, onsetEnv = 0, flash = 0;
     let activePreset = -1;
 
@@ -121,13 +114,18 @@ export default defineApp({
         mid.update(a.midAuto, dt, tau);
         treble.update(a.trebleAuto, dt, tau);
         level.update(a.levelAuto, dt, tau);
+        loudness.update(a.level, dt, tau);
         if (a.onset) onsetEnv = Math.max(onsetEnv, 0.4 + 0.6 * a.onsetStrength);
         onsetEnv *= Math.exp(-dt * 8 * (1 - 0.7 * p.smoothing));
         onset.update(onsetEnv, dt, 0.01 + p.smoothing * 0.08);
         if (f.fired('flash')) flash = 1;
         flash *= Math.exp(-dt * 5);
 
-        phase += dt * p.speed * (0.5 + level.value);
+        // levelAuto reads ~1 for any steady sound, so motion tracks sound vs silence; the raw level
+        // (-60..0 dBFS → 0..1) tracks loudness. velocityDrift blends from the first to the second.
+        const presenceRate = 0.5 + level.value;
+        const loudnessRate = 2 * loudness.value;
+        phase += dt * p.speed * (presenceRate + (loudnessRate - presenceRate) * p.velocityDrift);
         // Bounded hue wander around the chosen colors (at most ~±0.4 of the wheel at full drift).
         hueT += dt;
         const hueOffset = p.hueDrift * (0.25 * Math.sin(hueT * 0.2) + 0.15 * mapRange(a.centroid, 500, 5000, 0, 1));
