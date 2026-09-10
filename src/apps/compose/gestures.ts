@@ -39,6 +39,8 @@ export interface Swing {
   readonly size: number;
   /** The arm's hand was seen open when the swing ended. */
   readonly open: boolean;
+  /** Height of the swing's midpoint on screen (normalized image y, 0 = top). */
+  readonly y: number;
 }
 
 const vis = (p: Landmark): boolean => (p.visibility ?? 0) >= VIS_MIN;
@@ -81,8 +83,10 @@ export class Arm {
   private px = 0;
   private py = 0;
   private pt = 0;
+  /** Previous wrist height on screen. */
+  private pwy = 0;
   private has = false;
-  private swing: { sx: number; sy: number; dx: number; dy: number; peak: number; t0: number } | null = null;
+  private swing: { sx: number; sy: number; wy: number; dx: number; dy: number; peak: number; t0: number } | null = null;
 
   updateHand(h: Hand | null, now: number): void {
     if (!h) {
@@ -102,14 +106,18 @@ export class Arm {
     if (now - this.pendingSince >= HAND_SETTLE_MS) this.hand = v;
   }
 
-  /** Feed the wrist position relative to the shoulders (body scales); returns a swing when one ends. */
-  updateMotion(rx: number, ry: number, t: number, minSpeed: number): Swing | null {
+  /**
+   * Feed the wrist position relative to the shoulders (body scales) and its height on screen (`wy`);
+   * returns a swing when one ends.
+   */
+  updateMotion(rx: number, ry: number, wy: number, t: number, minSpeed: number): Swing | null {
     const x = this.fx.filter(rx, t), y = this.fy.filter(ry, t);
     const dt = t - this.pt;
     const ok = this.has && dt > 0 && dt < 0.25;
-    const px = this.px, py = this.py;
+    const px = this.px, py = this.py, pwy = this.pwy;
     this.px = x;
     this.py = y;
+    this.pwy = wy;
     this.pt = t;
     this.has = true;
     if (!ok) {
@@ -128,7 +136,9 @@ export class Arm {
       if (speed < minSpeed * STOP_RATIO || along < 0 || t - s.t0 > MAX_SWING_S) {
         this.swing = null;
         const size = Math.hypot(x - s.sx, y - s.sy);
-        if (size >= MIN_SIZE) out = { dir: y < s.sy ? 'up' : 'down', speed: s.peak, size, open: this.hand === 'open' };
+        if (size >= MIN_SIZE) {
+          out = { dir: y < s.sy ? 'up' : 'down', speed: s.peak, size, open: this.hand === 'open', y: (s.wy + wy) / 2 };
+        }
       } else {
         // Follow the arc of the swing, so only a real turnaround ends it.
         const nx = s.dx * 0.6 + (vx / speed) * 0.4, ny = s.dy * 0.6 + (vy / speed) * 0.4;
@@ -137,7 +147,7 @@ export class Arm {
         s.dy = ny / n;
       }
     }
-    if (!this.swing && speed >= minSpeed) this.swing = { sx: px, sy: py, dx: vx / speed, dy: vy / speed, peak: speed, t0: t };
+    if (!this.swing && speed >= minSpeed) this.swing = { sx: px, sy: py, wy: pwy, dx: vx / speed, dy: vy / speed, peak: speed, t0: t };
     return out;
   }
 
@@ -257,7 +267,7 @@ export class GestureTracker {
           continue;
         }
         // Relative to the shoulders, so walking or leaning doesn't read as a swing.
-        const s = arm.updateMotion(((w.x - mx) * ASPECT) / b.scale, (w.y - my) / b.scale, t, minSpeed);
+        const s = arm.updateMotion(((w.x - mx) * ASPECT) / b.scale, (w.y - my) / b.scale, w.y, t, minSpeed);
         if (s) swings.push(s);
       }
     }

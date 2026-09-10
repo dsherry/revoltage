@@ -1,22 +1,16 @@
 import * as Tone from 'tone';
 import { clamp, defineApp, defineParams, mapRange } from '@sdk';
 import { GestureTracker, MIN_SIZE, type HandState, type Swing } from './gestures';
+import { makeNotes, NOTE_NAMES, noteName, randInt, SCALE_NAMES, SCALES } from './scales';
 
 const OUTPUTS = ['OP-1 (MIDI)', 'Browser synth'] as const;
-const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
-/** Note groups: semitone steps within an octave, and how many octaves the group spans (plus the top root). */
-const SCALES: Record<string, { steps: readonly number[]; octaves: number }> = {
-  'Major pentatonic (1 oct)': { steps: [0, 2, 4, 7, 9], octaves: 1 },
-};
-const SCALE_NAMES = Object.keys(SCALES);
+const KEY_STYLES = ['root', 'random', 'height'] as const;
 
 const TEMPO = 'Tempo';
 const DEVICES = 'Devices';
 
 /** Swing size (body scales) that plays the longest string. */
 const BIG_SIZE = 2.5;
-const MIN_NOTES = 2;
-const MAX_NOTES = 7;
 /** Notes are sent this far ahead; kept short because sent MIDI can't be recalled. */
 const LOOKAHEAD_MS = 50;
 /** Held fraction of each step. */
@@ -36,8 +30,12 @@ const params = defineParams({
   repeat: { type: 'toggle', default: true, description: 'Echo each string: it comes back after its own length plus the same length of silence' },
   feedback: { type: 'slider', min: 0, max: 0.99, step: 0.01, default: 0.25, description: 'How slowly the echoes die away: 0 = one repeat, 0.99 = very slow' },
   scale: { type: 'select', options: SCALE_NAMES, default: SCALE_NAMES[0], description: 'Notes the strings are made of' },
-  root: { type: 'select', options: NOTE_NAMES, default: 'C', description: 'Key' },
+  keyStyle: { type: 'select', options: KEY_STYLES, default: 'root', description: 'Key of each string: the root setting, random, or the height of the swing on screen (12 bands, C at the bottom up to B at the top)' },
+  root: { type: 'select', options: NOTE_NAMES, default: 'C', description: 'Key (when key style is root)' },
   octave: { type: 'slider', min: 1, max: 7, step: 1, default: 4, description: 'Octave of the root (4 = middle C)' },
+  startOnRoot: { type: 'toggle', default: false, description: 'Up-swings start on the root, down-swings on the root an octave up' },
+  minNotes: { type: 'slider', min: 1, max: 12, step: 1, default: 2, description: 'Notes in a string from the smallest swings' },
+  maxNotes: { type: 'slider', min: 1, max: 24, step: 1, default: 7, description: 'Notes in a string from the biggest swings (if not above the minimum, the minimum + 1)' },
   slowest: { type: 'slider', min: 0.5, max: 8, step: 0.1, default: 2, group: TEMPO, description: 'Notes per second for the slowest swings' },
   fastest: { type: 'slider', min: 4, max: 30, step: 0.5, default: 16, group: TEMPO, description: 'Notes per second for the fastest swings' },
   minSwing: { type: 'slider', min: 0.5, max: 8, step: 0.1, default: 2, group: TEMPO, description: 'Wrist speed (shoulder widths per second) a movement needs to count as a swing' },
@@ -161,28 +159,22 @@ export default defineApp({
     ctx.own(p.on('feedback', (v) => { for (const e of echoes) e.fb.gain.setTargetAtTime(v, ac.currentTime, 0.02); }));
     ctx.own(p.on('repeat', (on) => { if (!on) dropEchoes(0.05); }));
 
-    /** Consecutive notes of the scale, starting lower-middle going up or upper-middle going down. */
-    function makeNotes(dir: 'up' | 'down', count: number): number[] {
-      const sc = SCALES[p.scale] ?? SCALES[SCALE_NAMES[0]];
-      const len = sc.steps.length, top = len * sc.octaves;
-      const half = top / 2;
-      const lo = dir === 'up' ? 0 : Math.ceil(half), hi = dir === 'up' ? Math.floor(half) : top;
-      const start = lo + Math.floor(Math.random() * (hi - lo + 1));
-      const root = 12 * (p.octave + 1) + Math.max(0, NOTE_NAMES.indexOf(p.root as (typeof NOTE_NAMES)[number]));
-      const out: number[] = [];
-      for (let k = 0; k < count; k++) {
-        const i = start + (dir === 'up' ? k : -k);
-        const o = Math.floor(i / len);
-        out.push(clamp(root + 12 * o + sc.steps[i - o * len], 0, 127));
-      }
-      return out;
+    /** MIDI note of this string's root, from the key style. */
+    function rootFor(s: Swing): number {
+      const key = p.keyStyle === 'random' ? randInt(0, 11)
+        : p.keyStyle === 'height' ? clamp(Math.floor((1 - s.y) * 12), 0, 11)
+        : Math.max(0, NOTE_NAMES.indexOf(p.root));
+      return 12 * (p.octave + 1) + key;
     }
 
     function play(s: Swing): void {
       const u = clamp((s.speed - p.minSwing) / Math.max(0.1, p.fastSwing - p.minSwing));
       const rate = p.slowest * (Math.max(p.fastest, p.slowest) / p.slowest) ** u;
       const step = 1 / rate;
-      const count = Math.round(mapRange(s.size, MIN_SIZE, BIG_SIZE, MIN_NOTES, MAX_NOTES));
+      const lo = p.minNotes, hi = p.maxNotes > p.minNotes ? p.maxNotes : p.minNotes + 1;
+      const count = Math.round(mapRange(s.size, MIN_SIZE, BIG_SIZE, lo, hi));
+      const notes = makeNotes(SCALES[p.scale] ?? SCALES[SCALE_NAMES[0]], s.dir, count, rootFor(s), p.startOnRoot);
+      if (p.debug) ctx.log(`velocity ${s.speed.toFixed(1)} (${rate.toFixed(1)} notes/s): ${notes.map(noteName).join(' ')}`);
       const len = count * step;
       const synth = p.output === 'Browser synth';
       const t0 = performance.now() + 10, a0 = ac.currentTime + 0.01;
@@ -198,7 +190,7 @@ export default defineApp({
         voices.push({ synth: voice, doneAt: t0 + (len + SYNTH_RELEASE_S + 0.2) * 1000 });
       } else if (!midiOut.connected && !warnedMidi) {
         warnedMidi = true;
-        ctx.log('comPose: MIDI output not connected; notes are going nowhere');
+        ctx.log('MIDI output not connected; notes are going nowhere');
       }
 
       if (p.repeat) {
@@ -213,7 +205,7 @@ export default defineApp({
         while (echoes.length > MAX_ECHOES) echoes.shift()?.dispose(0.05);
       }
 
-      strings.push({ notes: makeNotes(s.dir, count), t0, a0, step, vel: 0.6 + 0.4 * u, ch: p.channel, voice, next: 0 });
+      strings.push({ notes, t0, a0, step, vel: 0.6 + 0.4 * u, ch: p.channel, voice, next: 0 });
     }
 
     function schedule(now: number): void {
@@ -267,7 +259,7 @@ export default defineApp({
       held = [];
       midiOut.allNotesOff();
       gestures.cancel();
-      ctx.log(`comPose: ${why} — all notes off, echoes cleared`);
+      ctx.log(`${why} — all notes off, echoes cleared`);
     }
 
     function drawDebug(): void {
@@ -314,6 +306,7 @@ export default defineApp({
             speed: mapRange(Math.random(), 0, 1, p.minSwing, p.fastSwing),
             size: mapRange(Math.random(), 0, 1, MIN_SIZE, BIG_SIZE),
             open: true,
+            y: Math.random(),
           });
         }
         if (cv.connected && cv.updatedAt !== lastCv) {
