@@ -11,6 +11,8 @@ import { handleKey } from './keyboard';
 import { createStubServices } from './stubs';
 import { AudioEngine } from './audio/audio';
 import { ClockEngine } from './clock/clock';
+import { MidiEngine } from './midi/midi';
+import { Scope } from './scope';
 import type { Services } from './services';
 
 const DEFAULT_OUTPUT = { w: 1920, h: 1080 };
@@ -27,7 +29,15 @@ export class Engine {
   readonly stats = new Stats();
   readonly audio = new AudioEngine();
   readonly clock = new ClockEngine();
-  readonly services: Services = { ...createStubServices(), audio: this.audio, clock: this.clock };
+  readonly midi = new MidiEngine({
+    loadSlot: (i) => void this.loadSlot(i),
+    toggleBlackout: () => this.toggleBlackout(),
+    togglePanic: () => this.togglePanic(),
+    setMasterVolume: (v) => this.audio.setMasterVolume(v),
+    getMasterVolume: () => this.audio.masterVolume,
+    setlistState: () => ({ filled: this.setlist.map(Boolean), active: this.activeSlot }),
+  });
+  readonly services: Services = { ...createStubServices(), audio: this.audio, midi: this.midi, clock: this.clock };
   readonly keyboard = { handle: (e: KeyboardEvent) => handleKey(e, this) };
 
   started = false;
@@ -45,6 +55,16 @@ export class Engine {
     this.host = new AppHost(this);
     this.audio.onChange = () => this.emit();
     this.clock.onChange = () => this.emit();
+    this.midi.onChange = () => this.emit();
+    // The clock sends through a permanent (never-unmounted) MIDI scope.
+    let clockOut: ReturnType<MidiEngine['scoped']> | null = null;
+    this.clock.attachMidi({
+      onClock: (cb) => this.midi.onClock(cb),
+      send: (device, bytes, atMs) => {
+        clockOut ??= this.midi.scoped(new Scope(), { get: () => undefined, on: () => () => {} });
+        clockOut.output(device).send(bytes, atMs);
+      },
+    });
     this.loop = new Loop({
       frame: (now, dt) => this.frame(now, dt),
       driver: () => (this.output.visible ? this.output.win! : window),
