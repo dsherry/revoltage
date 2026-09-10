@@ -6,18 +6,28 @@
   import LogPanel from './LogPanel.svelte';
   import Mixer from './Mixer.svelte';
   import { view } from './view.svelte';
+  import { log } from '../engine/log';
 
   const tabs = ['mixer', 'log'] as const;
   let tab = $state<(typeof tabs)[number]>('mixer');
   const errors = $derived(view.logs.filter((e) => e.level === 'error').length);
 </script>
 
+{#snippet crashed(error: unknown, reset: () => void)}
+  <div class="crashed">Panel error: {String(error)} <button onclick={reset}>Retry</button></div>
+{/snippet}
+
+<!-- Each panel is an error boundary: one panel failing can't freeze the rest of the UI. -->
 <div class="layout">
-  <header><TopBar /></header>
-  <aside class="left"><Setlist /></aside>
+  <header>
+    <svelte:boundary onerror={(e) => log('error', 'ui', e)} failed={crashed}><TopBar /></svelte:boundary>
+  </header>
+  <aside class="left">
+    <svelte:boundary onerror={(e) => log('error', 'ui', e)} failed={crashed}><Setlist /></svelte:boundary>
+  </aside>
   <main>
-    <Stage />
-    <Settings />
+    <svelte:boundary onerror={(e) => log('error', 'ui', e)} failed={crashed}><Stage /></svelte:boundary>
+    <svelte:boundary onerror={(e) => log('error', 'ui', e)} failed={crashed}><Settings /></svelte:boundary>
   </main>
   <aside class="right">
     <nav class="tabs">
@@ -27,7 +37,9 @@
         </button>
       {/each}
     </nav>
-    {#if tab === 'mixer'}<Mixer />{:else}<LogPanel />{/if}
+    <svelte:boundary onerror={(e) => log('error', 'ui', e)} failed={crashed}>
+      {#if tab === 'mixer'}<Mixer />{:else}<LogPanel />{/if}
+    </svelte:boundary>
   </aside>
 </div>
 

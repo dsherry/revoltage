@@ -37,6 +37,11 @@ setInterval(() => {
 }, 500);
 
 export function installErrorHandlers(win: Window, source: string): void {
-  win.addEventListener('error', (ev) => log('error', source, ev.error ?? ev.message));
+  win.addEventListener('error', (ev) => {
+    if (ev.error instanceof Error) { log('error', source, ev.error); return; }
+    // Non-Error throws and browser-dispatched errors: keep whatever detail there is.
+    const where = ev.filename ? ` at ${ev.filename}:${ev.lineno}:${ev.colno}` : '';
+    log('error', source, `${ev.message || '(no message)'}${where} [${typeof ev.error}: ${String(ev.error)}]`);
+  });
   win.addEventListener('unhandledrejection', (ev) => log('error', source, 'unhandled rejection:', ev.reason));
 }
