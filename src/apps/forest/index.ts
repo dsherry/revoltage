@@ -36,6 +36,7 @@ const params = defineParams({
   colorB: { type: 'color', default: '#ffc94d', description: 'Light: sunlit leaves, cell walls, fireflies (APC pad rows 5–6)' },
   colorC: { type: 'color', default: '#7fd4ff', description: 'Electric: pulses, electron sparks, lightning (APC pad rows 7–8)' },
   strike: { type: 'trigger', description: 'Force an electrical strike (APC track button 1)' },
+  sensitivity: { type: 'slider', min: 0, max: 1, default: 0.8, description: 'Input sensitivity: 0 = only very loud sound gets through, 1 = everything, even quiet sounds' },
   churn: { type: 'slider', min: 0, max: 1, default: 0.4, description: 'Shiny Cell: how often cells are born and die (hits can spawn cells too)' },
   parade: { type: 'toggle', default: false, description: 'Lightning Chase: each chase is followed by a turtle and a sloth parading with colorful flags' },
   useCamera: {
@@ -106,6 +107,7 @@ export default defineApp({
     };
     const level = smoother(0.2), bass = smoother(0.2), mid = smoother(0.2), treble = smoother(0.2);
     const handX = smoother(0.15, 0.5), handY = smoother(0.15, 0.5);
+    const gate = smoother(0.1);
     const handPos = { x: 0.5, y: 0.5 };
     let glowBoost = 0;
     let activePreset = -1;
@@ -150,14 +152,19 @@ export default defineApp({
     return {
       frame(f) {
         const a = audio.features;
+        // Sensitivity is a soft noise gate on the real input level (the *Auto values are
+        // loudness-normalized, so they can't tell quiet from loud). 1 = always open.
+        const threshold = (1 - p.sensitivity) * 0.9;
+        const open = clamp((a.level - threshold + 0.06) / 0.12, 0, 1);
+        const g = gate.update(open * open * (3 - 2 * open), f.dt);
         const tau = 0.05 + p.calm * 0.9;
-        inputs.level = level.update(a.levelAuto, f.dt, tau);
-        inputs.bass = bass.update(a.bassAuto, f.dt, tau);
-        inputs.mid = mid.update(a.midAuto, f.dt, tau);
-        inputs.treble = treble.update(a.trebleAuto, f.dt, tau);
+        inputs.level = level.update(a.levelAuto * g, f.dt, tau);
+        inputs.bass = bass.update(a.bassAuto * g, f.dt, tau);
+        inputs.mid = mid.update(a.midAuto * g, f.dt, tau);
+        inputs.treble = treble.update(a.trebleAuto * g, f.dt, tau);
 
         const strike = f.fired('strike');
-        inputs.onset = strike || (a.onset && p.charge > 0.02);
+        inputs.onset = strike || (a.onset && g > 0.5 && p.charge > 0.02);
         inputs.onsetStrength = strike ? 1 : a.onsetStrength;
         inputs.pitch = null;
         if (a.onset) {
