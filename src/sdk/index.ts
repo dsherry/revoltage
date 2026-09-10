@@ -4,6 +4,7 @@ import { RESERVED_PARAM_NAMES, type ParamSchema } from './params';
 export * from './types';
 export * from './params';
 export * from './util';
+export * from './apc';
 
 /** Define an app. The default export of `src/apps/<name>/index.ts`. */
 export function defineApp<const S extends ParamSchema, K extends SurfaceKind>(def: AppDef<S, K>): AppDef<S, K> {
