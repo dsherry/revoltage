@@ -29,7 +29,4 @@ addEventListener('keydown', (e) => {
 addEventListener('message', (e) => {
   if (e.origin === location.origin && (e.data as { type?: string } | null)?.type === 'fullscreen') goFullscreen();
 });
-document.addEventListener('fullscreenchange', () => {
-  hint.hidden = !!document.fullscreenElement;
-});
 if (!window.opener) hint.textContent = 'Open this window from the Revoltage control window (press O there).';
