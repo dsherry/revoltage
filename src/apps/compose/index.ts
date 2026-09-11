@@ -39,9 +39,7 @@ const params = defineParams({
   octave: { type: 'slider', min: 1, max: 7, step: 1, default: 4, description: 'Octave of the root (4 = middle C)' },
   startOnRoot: { type: 'toggle', default: false, description: 'Up-swings start on the root, down-swings on the root an octave up' },
   minNotes: { type: 'slider', min: 1, max: 12, step: 1, default: 2, description: 'Notes in a string from the smallest swings' },
-  maxNotes: { type: 'slider', min: 1, max: 24, step: 1, default: 7, description: 'Notes in a string from the biggest swings (if not above the minimum, the minimum + 1)' },
-  maxStrings: { type: 'slider', min: 1, max: 8, step: 1, default: 4, description: 'Strings sending notes at once: when one more starts, the oldest stops early (its echo carries on)' },
-  slowest: { type: 'slider', min: 0.5, max: 8, step: 0.1, default: 2, group: SWING, description: 'Notes per second for the slowest swings' },
+  maxNotes: { type: 'slider', min: 1, max: 24, step: 1, default: 7, description: 'Notes in a string from the biggest swings (if not above the minimum, the minimum + 1)' },  slowest: { type: 'slider', min: 0.5, max: 8, step: 0.1, default: 2, group: SWING, description: 'Notes per second for the slowest swings' },
   fastest: { type: 'slider', min: 4, max: 30, step: 0.5, default: 16, group: SWING, description: 'Notes per second for the fastest swings' },
   minSwing: { type: 'slider', min: 0.5, max: 8, step: 0.1, default: 2, group: SWING, description: 'Arms mode: wrist speed (shoulder widths per second) a movement needs to count as a swing' },
   fastSwing: { type: 'slider', min: 3, max: 25, step: 0.5, default: 10, group: SWING, description: 'Arms mode: wrist speed that plays at the fastest tempo' },
@@ -222,11 +220,6 @@ export default defineApp({
         while (echoes.length > MAX_ECHOES) echoes.shift()?.dispose(0.05);
       }
 
-      const cut = strings.length - p.maxStrings + 1;
-      if (cut > 0) {
-        strings.splice(0, cut);
-        if (p.debug) ctx.log(`cut ${cut} string(s) short: more than ${p.maxStrings} at once`);
-      }
       strings.push({ notes, t0, a0, step, vel: 0.6 + 0.4 * u, ch: p.channel, voice, next: 0 });
     }
 
