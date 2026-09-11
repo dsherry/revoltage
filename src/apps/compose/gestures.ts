@@ -27,6 +27,8 @@ const BETA = 0.7;
 /** A swing ends when the movement slows below this fraction of the swing threshold. */
 const STOP_RATIO = 0.5;
 const MAX_SWING_S = 1;
+/** Shortest time between two strings from one arm or hand: tracking jitter can split one movement into several swings. */
+const STRING_GAP_S = 0.2;
 /** Shortest swing that plays, in body scales. */
 export const MIN_SIZE = 0.4;
 /** The X must be seen this long before it fires... */
@@ -45,6 +47,8 @@ export interface GestureOpts {
   readonly mode: TrackMode;
   /** Speed (body scales per second) a movement needs to count as a swing. */
   readonly minSpeed: number;
+  /** Faster than this is a tracking glitch, not a movement: it's ignored. */
+  readonly maxSpeed: number;
   /** Position smoothing, 0 (raw) to 1 (heavy). */
   readonly smooth: number;
 }
@@ -108,6 +112,8 @@ export class Limb {
   private pwy = 0;
   private has = false;
   private swing: { sx: number; sy: number; wy: number; dx: number; dy: number; peak: number; t0: number } | null = null;
+  /** When this limb last returned a swing (seconds). */
+  private firedAt = -Infinity;
 
   updateHand(h: Hand | null, now: number): void {
     if (!h) {
@@ -129,9 +135,10 @@ export class Limb {
 
   /**
    * Feed a position (isotropic screen units), its height on screen (`wy`), the body scale speeds and
-   * sizes are measured in, and the smoothing cutoff (Hz); returns a swing when one ends.
+   * sizes are measured in, the speed limits, and the smoothing cutoff (Hz); returns a swing when one ends.
    */
-  updateMotion(rx: number, ry: number, wy: number, t: number, scale: number, minSpeed: number, cutoff: number): Swing | null {
+  updateMotion(rx: number, ry: number, wy: number, t: number, scale: number, o: GestureOpts, cutoff: number): Swing | null {
+    const { minSpeed, maxSpeed } = o;
     this.fx.setMinCutoff(cutoff);
     this.fy.setMinCutoff(cutoff);
     this.fx.setBeta(BETA / scale);
@@ -151,6 +158,11 @@ export class Limb {
       return null;
     }
     const vx = (x - px) / dt / scale, vy = (y - py) / dt / scale, speed = Math.hypot(vx, vy);
+    if (speed > maxSpeed) {
+      // A landmark jumped: drop the swing and start afresh rather than play the glitch.
+      this.lose();
+      return null;
+    }
     this.speed = speed;
 
     let out: Swing | null = null;
@@ -161,7 +173,8 @@ export class Limb {
       if (speed < minSpeed * STOP_RATIO || along < 0 || t - s.t0 > MAX_SWING_S) {
         this.swing = null;
         const size = Math.hypot(x - s.sx, y - s.sy) / scale;
-        if (size >= MIN_SIZE) {
+        if (size >= MIN_SIZE && t - this.firedAt >= STRING_GAP_S) {
+          this.firedAt = t;
           out = { dir: y < s.sy ? 'up' : 'down', speed: s.peak, size, open: this.hand === 'open', y: (s.wy + wy) / 2 };
         }
       } else {
@@ -282,7 +295,7 @@ export class GestureTracker {
 
     let swings: Swing[] = [];
     if (o.mode === 'hands') {
-      this.updateHands(hands, now, o.minSpeed, cutoff, swings);
+      this.updateHands(hands, now, o, cutoff, swings);
     } else {
       this.matchHands(wrists, hands, now);
       for (const [b, lm] of live) {
@@ -294,7 +307,7 @@ export class GestureTracker {
             continue;
           }
           // Relative to the shoulders, so walking or leaning doesn't read as a swing.
-          const s = arm.updateMotion((w.x - mx) * ASPECT, w.y - my, w.y, t, b.scale, o.minSpeed, cutoff);
+          const s = arm.updateMotion((w.x - mx) * ASPECT, w.y - my, w.y, t, b.scale, o, cutoff);
           if (s) swings.push(s);
         }
       }
@@ -333,7 +346,7 @@ export class GestureTracker {
   }
 
   /** Hands mode: every tracked hand swings on its own, measured at its wrist and fingertips. */
-  private updateHands(hands: readonly Hand[], now: number, minSpeed: number, cutoff: number, out: Swing[]): void {
+  private updateHands(hands: readonly Hand[], now: number, o: GestureOpts, cutoff: number, out: Swing[]): void {
     const present = new Set<number>();
     for (const h of hands) {
       present.add(h.id);
@@ -352,7 +365,7 @@ export class GestureTracker {
       th.y = y / HAND_POINTS.length;
       const raw = Math.max(0.01, dist(lm[0], lm[9]) * HAND_SCALE);
       th.scale = th.scale ? th.scale + (raw - th.scale) * 0.1 : raw;
-      const s = th.limb.updateMotion(th.x * ASPECT, th.y, th.y, h.seen / 1000, th.scale, minSpeed, cutoff);
+      const s = th.limb.updateMotion(th.x * ASPECT, th.y, th.y, h.seen / 1000, th.scale, o, cutoff);
       if (s) out.push(s);
     }
     for (const [id, th] of this.hands) {

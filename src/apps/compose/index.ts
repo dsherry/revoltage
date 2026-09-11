@@ -12,6 +12,8 @@ const DEVICES = 'Devices';
 
 /** Swing size (body scales) that plays the longest string. */
 const BIG_SIZE = 2.5;
+/** Swing speeds above this multiple of the fastest-tempo speed are tracking glitches. */
+const GLITCH_RATIO = 3;
 /** Notes are sent this far ahead; kept short because sent MIDI can't be recalled. */
 const LOOKAHEAD_MS = 50;
 /** Held fraction of each step. */
@@ -24,6 +26,9 @@ const SYNTH_RELEASE_S = 0.25;
 const MAX_ECHOES = 16;
 /** Repeat note-offs this much later at a stop, for notes already sent ahead. */
 const STOP_REPEAT_MS = 250;
+/** At most MAX_NOTES_PER_WINDOW notes start within any NOTE_WINDOW_MS, across all strings; the rest are skipped. */
+const MAX_NOTES_PER_WINDOW = 3;
+const NOTE_WINDOW_MS = 100;
 const HAND_COLORS: Record<HandState, string> = { open: '#5cffb0', closed: '#ff3b6b', none: '#777' };
 
 const params = defineParams({
@@ -38,6 +43,7 @@ const params = defineParams({
   startOnRoot: { type: 'toggle', default: false, description: 'Up-swings start on the root, down-swings on the root an octave up' },
   minNotes: { type: 'slider', min: 1, max: 12, step: 1, default: 2, description: 'Notes in a string from the smallest swings' },
   maxNotes: { type: 'slider', min: 1, max: 24, step: 1, default: 7, description: 'Notes in a string from the biggest swings (if not above the minimum, the minimum + 1)' },
+  maxStrings: { type: 'slider', min: 1, max: 8, step: 1, default: 4, description: 'Strings playing at once: a new string cuts the oldest one short' },
   slowest: { type: 'slider', min: 0.5, max: 8, step: 0.1, default: 2, group: SWING, description: 'Notes per second for the slowest swings' },
   fastest: { type: 'slider', min: 4, max: 30, step: 0.5, default: 16, group: SWING, description: 'Notes per second for the fastest swings' },
   minSwing: { type: 'slider', min: 0.5, max: 8, step: 0.1, default: 2, group: SWING, description: 'Arms mode: wrist speed (shoulder widths per second) a movement needs to count as a swing' },
@@ -161,6 +167,8 @@ export default defineApp({
     let echoes: Echo[] = [];
     /** MIDI notes on (or sent ahead), for the stop. */
     let held: { n: number; ch: number; until: number }[] = [];
+    /** Start times (performance.now() ms) of recent notes, for the note density cap. */
+    let starts: number[] = [];
     let lastCv = 0;
     let warnedMidi = false;
 
@@ -218,6 +226,11 @@ export default defineApp({
         while (echoes.length > MAX_ECHOES) echoes.shift()?.dispose(0.05);
       }
 
+      const cut = strings.length - p.maxStrings + 1;
+      if (cut > 0) {
+        strings.splice(0, cut);
+        if (p.debug) ctx.log(`cut ${cut} string(s) short: more than ${p.maxStrings} at once`);
+      }
       strings.push({ notes, t0, a0, step, vel: 0.6 + 0.4 * u, ch: p.channel, voice, next: 0 });
     }
 
@@ -227,16 +240,16 @@ export default defineApp({
         const s = strings[i];
         const gate = Math.max(0.02, s.step * GATE);
         while (s.next < s.notes.length && s.t0 + s.next * s.step * 1000 <= horizon) {
-          const n = s.notes[s.next];
+          const k = s.next++, n = s.notes[k], at = s.t0 + k * s.step * 1000;
+          if (starts.filter((x) => x > at - NOTE_WINDOW_MS).length >= MAX_NOTES_PER_WINDOW) continue;
+          starts.push(at);
           if (s.voice) {
-            s.voice.triggerAttackRelease(mtof(n), gate, s.a0 + s.next * s.step, s.vel);
+            s.voice.triggerAttackRelease(mtof(n), gate, s.a0 + k * s.step, s.vel);
           } else {
-            const at = s.t0 + s.next * s.step * 1000;
             midiOut.noteOn(n, s.vel, s.ch, at);
             midiOut.noteOff(n, s.ch, at + gate * 1000);
             held.push({ n, ch: s.ch, until: at + gate * 1000 });
           }
-          s.next++;
         }
         if (s.next >= s.notes.length) strings.splice(i, 1);
       }
@@ -244,6 +257,7 @@ export default defineApp({
 
     function housekeeping(now: number): void {
       if (held.length) held = held.filter((h) => h.until > now);
+      if (starts.length) starts = starts.filter((x) => x > now - NOTE_WINDOW_MS);
       for (let i = voices.length - 1; i >= 0; i--) {
         if (now < voices[i].doneAt) continue;
         voices[i].synth.dispose();
@@ -258,12 +272,13 @@ export default defineApp({
       if (midiOut.connected) warnedMidi = false;
     }
 
-    /** Instant silence: pending notes dropped, MIDI panic, synth voices cut, echoes cleared. */
+    /** Near-instant silence: pending notes dropped, MIDI panic, synth voices cut, echoes faded out. */
     function stopAll(why: string): void {
       strings.length = 0;
       for (const v of voices) v.synth.dispose();
       voices.length = 0;
-      dropEchoes();
+      // Not quicker: cutting loud echoes in a few ms clicks.
+      dropEchoes(0.05);
       const later = performance.now() + STOP_REPEAT_MS;
       for (const h of held) {
         midiOut.noteOff(h.n, h.ch);
@@ -337,7 +352,7 @@ export default defineApp({
         }
         if (cv.connected && cv.updatedAt !== lastCv) {
           lastCv = cv.updatedAt;
-          const r = gestures.update(cv.people, cv.hands, cv.updatedAt, { mode: p.tracking, minSpeed: swingRange()[0], smooth: p.smooth });
+          const r = gestures.update(cv.people, cv.hands, cv.updatedAt, { mode: p.tracking, minSpeed: swingRange()[0], maxSpeed: swingRange()[1] * GLITCH_RATIO, smooth: p.smooth });
           if (r.stop) stopAll('X pose');
           for (const s of r.swings) if (s.open) play(s);
         }
