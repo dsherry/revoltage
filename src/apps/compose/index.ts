@@ -12,7 +12,7 @@ const DEVICES = 'Devices';
 
 /** Swing size (body scales) that plays the longest string. */
 const BIG_SIZE = 2.5;
-/** Swing speeds above this multiple of the fastest-tempo speed are tracking glitches. */
+/** Swing speeds are capped at this multiple of the fastest-tempo speed (tracking glitches read far faster). */
 const GLITCH_RATIO = 3;
 /** Notes are sent this far ahead; kept short because sent MIDI can't be recalled. */
 const LOOKAHEAD_MS = 50;
@@ -26,9 +26,6 @@ const SYNTH_RELEASE_S = 0.25;
 const MAX_ECHOES = 16;
 /** Repeat note-offs this much later at a stop, for notes already sent ahead. */
 const STOP_REPEAT_MS = 250;
-/** At most MAX_NOTES_PER_WINDOW notes start within any NOTE_WINDOW_MS, across all strings; the rest are skipped. */
-const MAX_NOTES_PER_WINDOW = 3;
-const NOTE_WINDOW_MS = 100;
 const HAND_COLORS: Record<HandState, string> = { open: '#5cffb0', closed: '#ff3b6b', none: '#777' };
 
 const params = defineParams({
@@ -43,13 +40,14 @@ const params = defineParams({
   startOnRoot: { type: 'toggle', default: false, description: 'Up-swings start on the root, down-swings on the root an octave up' },
   minNotes: { type: 'slider', min: 1, max: 12, step: 1, default: 2, description: 'Notes in a string from the smallest swings' },
   maxNotes: { type: 'slider', min: 1, max: 24, step: 1, default: 7, description: 'Notes in a string from the biggest swings (if not above the minimum, the minimum + 1)' },
-  maxStrings: { type: 'slider', min: 1, max: 8, step: 1, default: 4, description: 'Strings playing at once: a new string cuts the oldest one short' },
+  maxStrings: { type: 'slider', min: 1, max: 8, step: 1, default: 4, description: 'Strings sending notes at once: when one more starts, the oldest stops early (its echo carries on)' },
   slowest: { type: 'slider', min: 0.5, max: 8, step: 0.1, default: 2, group: SWING, description: 'Notes per second for the slowest swings' },
   fastest: { type: 'slider', min: 4, max: 30, step: 0.5, default: 16, group: SWING, description: 'Notes per second for the fastest swings' },
   minSwing: { type: 'slider', min: 0.5, max: 8, step: 0.1, default: 2, group: SWING, description: 'Arms mode: wrist speed (shoulder widths per second) a movement needs to count as a swing' },
   fastSwing: { type: 'slider', min: 3, max: 25, step: 0.5, default: 10, group: SWING, description: 'Arms mode: wrist speed that plays at the fastest tempo' },
   handMinSwing: { type: 'slider', min: 0.5, max: 8, step: 0.1, default: 1.5, group: SWING, description: 'Hands mode: hand speed (two hand lengths per second) a movement needs to count as a swing' },
   handFastSwing: { type: 'slider', min: 2, max: 25, step: 0.5, default: 6, group: SWING, description: 'Hands mode: hand speed that plays at the fastest tempo' },
+  cooldown: { type: 'slider', min: 0, max: 1000, step: 10, default: 200, group: SWING, description: 'Shortest time (ms) between two strings from the same arm or hand, so tracking jitter can\'t fire several from one movement' },
   smooth: { type: 'slider', min: 0, max: 1, step: 0.01, default: 0.5, group: SWING, description: 'Smooths tracked hand and wrist positions: 0 = raw, 1 = heavy (steadier but slower to react)' },
   camera: { type: 'input', kind: 'camera', default: 'webcam', group: DEVICES, description: 'Camera watching the performers' },
   maxPeople: { type: 'slider', min: 1, max: 4, step: 1, default: 2, group: DEVICES, description: 'People to track (applies when the app reloads)' },
@@ -167,8 +165,6 @@ export default defineApp({
     let echoes: Echo[] = [];
     /** MIDI notes on (or sent ahead), for the stop. */
     let held: { n: number; ch: number; until: number }[] = [];
-    /** Start times (performance.now() ms) of recent notes, for the note density cap. */
-    let starts: number[] = [];
     let lastCv = 0;
     let warnedMidi = false;
 
@@ -241,8 +237,6 @@ export default defineApp({
         const gate = Math.max(0.02, s.step * GATE);
         while (s.next < s.notes.length && s.t0 + s.next * s.step * 1000 <= horizon) {
           const k = s.next++, n = s.notes[k], at = s.t0 + k * s.step * 1000;
-          if (starts.filter((x) => x > at - NOTE_WINDOW_MS).length >= MAX_NOTES_PER_WINDOW) continue;
-          starts.push(at);
           if (s.voice) {
             s.voice.triggerAttackRelease(mtof(n), gate, s.a0 + k * s.step, s.vel);
           } else {
@@ -257,7 +251,6 @@ export default defineApp({
 
     function housekeeping(now: number): void {
       if (held.length) held = held.filter((h) => h.until > now);
-      if (starts.length) starts = starts.filter((x) => x > now - NOTE_WINDOW_MS);
       for (let i = voices.length - 1; i >= 0; i--) {
         if (now < voices[i].doneAt) continue;
         voices[i].synth.dispose();
@@ -352,7 +345,7 @@ export default defineApp({
         }
         if (cv.connected && cv.updatedAt !== lastCv) {
           lastCv = cv.updatedAt;
-          const r = gestures.update(cv.people, cv.hands, cv.updatedAt, { mode: p.tracking, minSpeed: swingRange()[0], maxSpeed: swingRange()[1] * GLITCH_RATIO, smooth: p.smooth });
+          const r = gestures.update(cv.people, cv.hands, cv.updatedAt, { mode: p.tracking, minSpeed: swingRange()[0], maxSpeed: swingRange()[1] * GLITCH_RATIO, cooldown: p.cooldown / 1000, smooth: p.smooth });
           if (r.stop) stopAll('X pose');
           for (const s of r.swings) if (s.open) play(s);
         }

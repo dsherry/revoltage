@@ -27,8 +27,6 @@ const BETA = 0.7;
 /** A swing ends when the movement slows below this fraction of the swing threshold. */
 const STOP_RATIO = 0.5;
 const MAX_SWING_S = 1;
-/** Shortest time between two strings from one arm or hand: tracking jitter can split one movement into several swings. */
-const STRING_GAP_S = 0.2;
 /** Shortest swing that plays, in body scales. */
 export const MIN_SIZE = 0.4;
 /** The X must be seen this long before it fires... */
@@ -47,8 +45,10 @@ export interface GestureOpts {
   readonly mode: TrackMode;
   /** Speed (body scales per second) a movement needs to count as a swing. */
   readonly minSpeed: number;
-  /** Faster than this is a tracking glitch, not a movement: it's ignored. */
+  /** Speeds are capped here: tracking glitches can read far faster than any arm moves. */
   readonly maxSpeed: number;
+  /** Shortest time (seconds) between two swings from one arm or hand, so jitter can't split one movement into several. */
+  readonly cooldown: number;
   /** Position smoothing, 0 (raw) to 1 (heavy). */
   readonly smooth: number;
 }
@@ -138,7 +138,7 @@ export class Limb {
    * sizes are measured in, the speed limits, and the smoothing cutoff (Hz); returns a swing when one ends.
    */
   updateMotion(rx: number, ry: number, wy: number, t: number, scale: number, o: GestureOpts, cutoff: number): Swing | null {
-    const { minSpeed, maxSpeed } = o;
+    const { minSpeed, maxSpeed, cooldown } = o;
     this.fx.setMinCutoff(cutoff);
     this.fy.setMinCutoff(cutoff);
     this.fx.setBeta(BETA / scale);
@@ -158,22 +158,19 @@ export class Limb {
       return null;
     }
     const vx = (x - px) / dt / scale, vy = (y - py) / dt / scale, speed = Math.hypot(vx, vy);
-    if (speed > maxSpeed) {
-      // A landmark jumped: drop the swing and start afresh rather than play the glitch.
-      this.lose();
-      return null;
-    }
-    this.speed = speed;
+    // The raw speed still steers direction; the capped one is what the swing reports.
+    const capped = Math.min(speed, maxSpeed);
+    this.speed = capped;
 
     let out: Swing | null = null;
     const s = this.swing;
     if (s) {
-      s.peak = Math.max(s.peak, speed);
+      s.peak = Math.max(s.peak, capped);
       const along = speed > 1e-6 ? (vx * s.dx + vy * s.dy) / speed : 0;
       if (speed < minSpeed * STOP_RATIO || along < 0 || t - s.t0 > MAX_SWING_S) {
         this.swing = null;
         const size = Math.hypot(x - s.sx, y - s.sy) / scale;
-        if (size >= MIN_SIZE && t - this.firedAt >= STRING_GAP_S) {
+        if (size >= MIN_SIZE && t - this.firedAt >= cooldown) {
           this.firedAt = t;
           out = { dir: y < s.sy ? 'up' : 'down', speed: s.peak, size, open: this.hand === 'open', y: (s.wy + wy) / 2 };
         }
@@ -185,7 +182,7 @@ export class Limb {
         s.dy = ny / n;
       }
     }
-    if (!this.swing && speed >= minSpeed) this.swing = { sx: px, sy: py, wy: pwy, dx: vx / speed, dy: vy / speed, peak: speed, t0: t };
+    if (!this.swing && speed >= minSpeed) this.swing = { sx: px, sy: py, wy: pwy, dx: vx / speed, dy: vy / speed, peak: capped, t0: t };
     return out;
   }
 
