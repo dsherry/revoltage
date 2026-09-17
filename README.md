@@ -35,7 +35,9 @@ npm run chrome   # (re)opens Chrome on it with background throttling off
 drawing the output window whenever it's covered, in another Space or behind the sharing app, and the
 share freezes. The script asks before quitting a running Chrome (a Meet call in Chrome will drop).
 
-## Keys (control window)
+## Control Keys (control window)
+
+I originally used an [Akai APC mini](https://www.akaipro.com/apc-mini-mk2) for the performance, but any MIDI controller with buttons and faders will work. The app UI is also controllable via mouse or touch.
 
 | Key | Action |
 |---|---|
