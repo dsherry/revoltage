@@ -7,6 +7,8 @@ All the apps run in a common platform harness, which provides shared functionali
 Design and decisions: [docs/SPEC.md](docs/SPEC.md). Sensor wiring: [docs/ARDUINO.md](docs/ARDUINO.md).
 macOS + Chrome only.
 
+I used Revoltage to send MIDI to my [OP1](https://teenage.engineering/products/op-1), and then used the audio signal from the OP1 as one of the control inputs for the visual apps I defined.
+
 <table>
   <tr>
     <td width="50%"><img src="docs/images/forest.jpg" width="100%" alt="Glowing green pine forest under a full moon, lit by a lightning strike"></td>
@@ -17,6 +19,8 @@ macOS + Chrome only.
     <td width="50%"><img src="docs/images/ripples.jpg" width="100%" alt="Concentric pink and olive ripples forming a moire pattern"></td>
   </tr>
 </table>
+
+<p align="center"><em>Here's a few realtime reactive audio-visual apps I built</em></p>
 
 ## Run
 
