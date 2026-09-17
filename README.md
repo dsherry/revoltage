@@ -9,6 +9,8 @@ macOS + Chrome only.
 
 I used Revoltage to send MIDI to my [OP1](https://teenage.engineering/products/op-1), and then used the audio signal from the OP1 as one of the control inputs for the visual apps I defined.
 
+Part of my goal here was to see how fast Claude Code could build something fun for the performance. I started building Revoltage from scratch around 8am and used it in the performance that night around 8pm. The code was entirely written by Claude Code. I first developed a product spec with requirements, which described the "app" concept, the inputs and outputs and the UI, so the app was fairly well-specified up front. I had Claude write an example app while we built the main application, to prove that things were working. Once the platform was proven to be stable I added the apps I used in the performance.
+
 <table>
   <tr>
     <td width="50%"><img src="docs/images/forest.jpg" width="100%" alt="Glowing green pine forest under a full moon, lit by a lightning strike"></td>
