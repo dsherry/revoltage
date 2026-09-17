@@ -1,9 +1,22 @@
-# revoltage
-Platform for audiovisual experiments at Re:Voltage Sept 2026
+# ⚡️ revoltage ⚡️
+## What Is This
+Revoltage is a platform I built for audiovisual experiments at [Re:Voltage](https://www.departurearts.org/events/httpsmariafinkelmeier.comrevoltage-reg), an experimental one-day performance & hackathon Sept 10 2026 in Boston.
 
-A browser-only platform for small audiovisual "apps" that react to audio, MIDI,
-cameras and Arduino sensors, rendered to a projector. Chrome on macOS only.
+Users of Revoltage can define multiple Typescript "apps" which use various inputs and outputs to do whatever they want. Inputs and outputs include audio, MIDI, visuals (webcam and projector), and serial data as control signals (e.g. sensors via Arduino).
+All the apps run in a common platform harness, which provides shared functionality: a control panel UI, a "setlist" of apps and a concept of parameters controllable via UI or MIDI (I used an [APC mini](https://www.akaipro.com/apc-mini-mk2)).
 Design and decisions: [docs/SPEC.md](docs/SPEC.md). Sensor wiring: [docs/ARDUINO.md](docs/ARDUINO.md).
+macOS + Chrome only.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/forest.jpg" width="100%" alt="Glowing green pine forest under a full moon, lit by a lightning strike"></td>
+    <td width="50%"><img src="docs/images/cells.jpg" width="100%" alt="Glowing Voronoi cells filled with swirling pink and blue particles"></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/blooms.jpg" width="100%" alt="Green-white blooms and violet particle clusters drifting over a reflective lagoon"></td>
+    <td width="50%"><img src="docs/images/ripples.jpg" width="100%" alt="Concentric pink and olive ripples forming a moire pattern"></td>
+  </tr>
+</table>
 
 ## Run
 
